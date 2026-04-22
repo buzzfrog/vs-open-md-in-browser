@@ -1,0 +1,17 @@
+.vscode/**
+.vscode-test/**
+.copilot-tracking/**
+src/**
+out/**
+test/**
+node_modules/**
+!node_modules/github-markdown-css/**
+**/*.ts
+**/*.map
+**/tsconfig*.json
+.gitignore
+.eslintrc*
+eslint.config.*
+esbuild.js
+.vscode-test.mjs
+**/.DS_Store

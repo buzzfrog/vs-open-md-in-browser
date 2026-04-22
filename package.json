@@ -1,0 +1,82 @@
+{
+  "name": "open-md-in-browser",
+  "displayName": "Open Markdown in Browser",
+  "description": "Render the current Markdown file as HTML and open it in your default web browser.",
+  "version": "0.1.1",
+  "publisher": "your-publisher-id",
+  "license": "MIT",
+  "engines": { "vscode": "^1.85.0", "node": ">=20" },
+  "categories": ["Other", "Visualization"],
+  "keywords": ["markdown", "preview", "browser", "html"],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "openMdInBrowser.open",
+        "title": "Open in Browser",
+        "category": "Markdown",
+        "icon": "$(globe)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "openMdInBrowser.open", "when": "editorLangId == markdown" }
+      ],
+      "editor/title": [
+        { "command": "openMdInBrowser.open", "when": "resourceLangId == markdown", "group": "navigation" }
+      ],
+      "editor/context": [
+        { "command": "openMdInBrowser.open", "when": "resourceLangId == markdown", "group": "navigation" }
+      ],
+      "explorer/context": [
+        { "command": "openMdInBrowser.open", "when": "resourceExtname == .md || resourceExtname == .markdown", "group": "navigation" }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "openMdInBrowser.open",
+        "key": "ctrl+shift+alt+v",
+        "mac": "cmd+shift+alt+v",
+        "when": "editorTextFocus && resourceLangId == markdown"
+      }
+    ]
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Renders Markdown to HTML; raw HTML in source is disabled."
+    },
+    "virtualWorkspaces": false
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "check-types": "tsc --noEmit",
+    "package": "npm run check-types && node esbuild.js --production",
+    "pretest": "npm run compile-tests && npm run compile",
+    "compile-tests": "tsc -p . --outDir out",
+    "test": "vscode-test",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "github-markdown-css": "^5.5.1",
+    "markdown-it": "^14.1.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.1",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.0",
+    "esbuild": "^0.21.0",
+    "eslint": "^9.0.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.4.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}
