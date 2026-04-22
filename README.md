@@ -45,3 +45,9 @@ See [CHANGELOG.md](CHANGELOG.md).
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Disclaimer
+
+This is a personal, independent project and is not affiliated with or endorsed by Microsoft.  
+All code and opinions are my own.
+
