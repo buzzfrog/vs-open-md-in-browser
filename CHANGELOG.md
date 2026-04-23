@@ -4,6 +4,14 @@ All notable changes to the `open-md-in-browser` extension are documented in this
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.2.0 - 2026-04-23
+
+### Added
+
+* YAML frontmatter is parsed with `gray-matter` and rendered as a metadata table above the document body in the preview.
+* When present, the frontmatter `title` field is used as the HTML document title.
+* Exported helpers `extractFrontmatter` and `renderFrontmatterTable` with unit tests covering HTML escaping, empty data, BOM/CRLF input, and non-frontmatter thematic breaks.
+
 ## 0.1.1 - 2026-04-18
 
 ### Added
