@@ -4,6 +4,12 @@ All notable changes to the `open-md-in-browser` extension are documented in this
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.3.2 - 2026-04-23
+
+### Fixed
+
+* Mermaid sequence diagrams no longer fail with "Syntax error in text" when labels contain `<port>` or other angle-bracketed text. Fence content is now HTML-escaped so the browser preserves it as text and mermaid reads the original source via `textContent` decoding (restores literal `<br/>` handling in flowchart labels).
+
 ## 0.3.1 - 2026-04-23
 
 ### Fixed

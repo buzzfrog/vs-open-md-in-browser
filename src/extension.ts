@@ -17,13 +17,18 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
   const info = (token.info || '').trim().split(/\s+/)[0].toLowerCase();
   if (info === 'mermaid') {
-    // Pass raw content so mermaid can parse <br/> in labels as line breaks.
-    // Only neutralize characters that would break out of the <pre> tag.
-    const safe = token.content.replace(/<\/pre/gi, '&lt;/pre');
+    // Escape HTML so the diagram source is preserved as text. Mermaid reads
+    // the element's textContent, which decodes entities back to the original
+    // characters (including literal `<br/>` in flowchart labels).
+    const safe = escapeHtml(token.content);
     return `<pre class="mermaid">${safe}</pre>\n`;
   }
   return defaultFence(tokens, idx, options, env, self);
 };
+
+export function renderMarkdown(body: string): string {
+  return md.render(body);
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   const previewServer = new PreviewServer();

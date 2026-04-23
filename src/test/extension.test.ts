@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { extractFrontmatter, renderFrontmatterTable } from '../extension';
+import { extractFrontmatter, renderFrontmatterTable, renderMarkdown } from '../extension';
 
 suite('openMdInBrowser', () => {
   suiteSetup(async () => {
@@ -58,6 +58,31 @@ suite('frontmatter helpers', () => {
     const { body, data } = extractFrontmatter(src);
     assert.strictEqual(data.title, 'A');
     assert.match(body, /Body/);
+  });
+});
+
+suite('mermaid fence rendering', () => {
+  test('escapes angle brackets in diagram source', () => {
+    const html = renderMarkdown('```mermaid\nE->>B: <port>\n```\n');
+    assert.match(html, /<pre class="mermaid">/);
+    assert.match(html, /&lt;port&gt;/);
+    assert.ok(!/<port>/.test(html), 'raw <port> should not appear in output');
+  });
+
+  test('escapes <br/> so mermaid receives it as text', () => {
+    const html = renderMarkdown('```mermaid\nflowchart LR\nA[x<br/>y]\n```\n');
+    assert.match(html, /&lt;br\/&gt;/);
+  });
+
+  test('neutralizes </pre so the block cannot be broken out of', () => {
+    const html = renderMarkdown('```mermaid\nfoo </pre bar\n```\n');
+    assert.ok(!/<\/pre>\s*bar/.test(html), '</pre should be escaped');
+    assert.match(html, /&lt;\/pre/);
+  });
+
+  test('escapes ampersands in diagram source', () => {
+    const html = renderMarkdown('```mermaid\nA & B\n```\n');
+    assert.match(html, /A &amp; B/);
   });
 });
 
