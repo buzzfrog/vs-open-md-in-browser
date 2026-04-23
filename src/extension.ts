@@ -12,6 +12,19 @@ const md = new MarkdownIt({
   breaks: false
 });
 
+const defaultFence = md.renderer.rules.fence!;
+md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+  const token = tokens[idx];
+  const info = (token.info || '').trim().split(/\s+/)[0].toLowerCase();
+  if (info === 'mermaid') {
+    // Pass raw content so mermaid can parse <br/> in labels as line breaks.
+    // Only neutralize characters that would break out of the <pre> tag.
+    const safe = token.content.replace(/<\/pre/gi, '&lt;/pre');
+    return `<pre class="mermaid">${safe}</pre>\n`;
+  }
+  return defaultFence(tokens, idx, options, env, self);
+};
+
 export function activate(context: vscode.ExtensionContext): void {
   const previewServer = new PreviewServer();
   context.subscriptions.push(previewServer);
@@ -82,11 +95,17 @@ function wrapHtmlDocument(title: string, css: string, body: string): string {
     .frontmatter-table { margin: 0 0 24px; font-size: 90%; }
     .frontmatter-table th { text-align: left; white-space: nowrap; width: 1%; }
     .frontmatter-table code { font-size: 90%; }
+    pre.mermaid { background: transparent; padding: 0; text-align: center; }
     ${css}
   </style>
 </head>
 <body class="markdown-body">
 ${body}
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  const theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
+  mermaid.initialize({ startOnLoad: true, theme, securityLevel: 'strict' });
+</script>
 </body>
 </html>`;
 }

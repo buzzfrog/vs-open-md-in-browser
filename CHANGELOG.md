@@ -4,6 +4,18 @@ All notable changes to the `open-md-in-browser` extension are documented in this
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.3.1 - 2026-04-23
+
+### Fixed
+
+* Pass mermaid fenced-block content through un-escaped so inline `<br/>` inside node labels renders as line breaks; only `</pre>` is neutralized to keep the container tag intact.
+
+## 0.3.0 - 2026-04-23
+
+### Added
+
+* Render ` ```mermaid ` fenced code blocks as diagrams in the preview using `mermaid` loaded from jsDelivr; theme follows the OS color scheme preference.
+
 ## 0.2.0 - 2026-04-23
 
 ### Added
