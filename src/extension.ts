@@ -54,7 +54,8 @@ export function activate(context: vscode.ExtensionContext): void {
           : path.basename(sourcePath);
         const title = escapeHtml(titleText);
         const css = loadGithubMarkdownCss(context);
-        const html = wrapHtmlDocument(title, css, bodyHtml);
+        const includeMermaid = /<pre class="mermaid">/.test(bodyHtml);
+        const html = wrapHtmlDocument(title, css, bodyHtml, { includeMermaid });
 
         const localUri = await previewServer.publish(html, sourceDir);
         const externalUri = await vscode.env.asExternalUri(localUri);
@@ -89,11 +90,48 @@ async function resolveTarget(uri?: vscode.Uri): Promise<vscode.Uri | undefined> 
   return undefined;
 }
 
-function wrapHtmlDocument(title: string, css: string, body: string): string {
+const MERMAID_VERSION = '11.14.0';
+const MERMAID_URL = `https://cdn.jsdelivr.net/npm/mermaid@${MERMAID_VERSION}/dist/mermaid.esm.min.mjs`;
+const MERMAID_SRI = 'sha384-QKnqrMjp4QCSqR5R2H+rXW8780iTNp7Y3mwQOMdlAZhMePrlb/UxZJYF+Mqf+kUw';
+
+function buildCspMeta(includeMermaid: boolean): string {
+  const scriptSrc = includeMermaid ? "'self' https://cdn.jsdelivr.net" : "'self'";
+  const policy = [
+    "default-src 'none'",
+    "img-src 'self' data: https:",
+    "style-src 'self' 'unsafe-inline'",
+    `script-src ${scriptSrc}`,
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "base-uri 'none'",
+    "form-action 'none'"
+  ].join('; ') + ';';
+  return `<meta http-equiv="Content-Security-Policy" content="${policy}" />`;
+}
+
+function buildMermaidScript(): string {
+  return `<script type="module" src="${MERMAID_URL}" integrity="${MERMAID_SRI}" crossorigin="anonymous"></script>
+<script type="module">
+  import mermaid from '${MERMAID_URL}';
+  const theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
+  mermaid.initialize({ startOnLoad: true, theme, securityLevel: 'strict' });
+</script>`;
+}
+
+function wrapHtmlDocument(
+  title: string,
+  css: string,
+  body: string,
+  options: { includeMermaid: boolean }
+): string {
+  const { includeMermaid } = options;
+  const cspMeta = buildCspMeta(includeMermaid);
+  const mermaidScript = includeMermaid ? `\n${buildMermaidScript()}` : '';
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  ${cspMeta}
   <title>${title}</title>
   <style>
     body { box-sizing: border-box; max-width: 980px; margin: 0 auto; padding: 32px; }
@@ -105,12 +143,7 @@ function wrapHtmlDocument(title: string, css: string, body: string): string {
   </style>
 </head>
 <body class="markdown-body">
-${body}
-<script type="module">
-  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-  const theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
-  mermaid.initialize({ startOnLoad: true, theme, securityLevel: 'strict' });
-</script>
+${body}${mermaidScript}
 </body>
 </html>`;
 }

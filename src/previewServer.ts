@@ -1,6 +1,7 @@
 import * as http from 'node:http';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 
 const IDLE_SHUTDOWN_MS = 5 * 60 * 1000;
@@ -26,9 +27,29 @@ const MIME_TYPES: Record<string, string> = {
   '.otf': 'font/otf'
 };
 
+const ASSET_EXT_ALLOWLIST = new Set(Object.keys(MIME_TYPES));
+
+// Rejects any path whose segments include dotfiles, `.git`, or `node_modules`.
+const DENY_SEGMENT_RE = /(^|[\\/])(\.[^\\/]+|\.git|node_modules)([\\/]|$)/;
+
+const TOKEN_PREFIX_RE = /^\/([0-9a-f]{32})(\/.*)?$/;
+
+const CSP = [
+  "default-src 'none'",
+  "img-src 'self' data: https:",
+  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self' https://cdn.jsdelivr.net",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "base-uri 'none'",
+  "form-action 'none'"
+].join('; ') + ';';
+
 interface PublishedState {
   html: string;
   rootDir: string;
+  rootReal: string;
+  token: string;
 }
 
 export class PreviewServer implements vscode.Disposable {
@@ -47,11 +68,14 @@ export class PreviewServer implements vscode.Disposable {
   }
 
   async publish(html: string, rootDir: string): Promise<vscode.Uri> {
-    this.state = { html, rootDir: path.resolve(rootDir) };
+    const resolvedRoot = path.resolve(rootDir);
+    const rootReal = await fs.promises.realpath(resolvedRoot);
+    const token = randomBytes(16).toString('hex');
+    this.state = { html, rootDir: resolvedRoot, rootReal, token };
     await this.ensureStarted();
     this.rearmIdleTimer();
     const cacheBuster = Date.now().toString(36);
-    return vscode.Uri.parse(`http://127.0.0.1:${this.port}/?v=${cacheBuster}`);
+    return vscode.Uri.parse(`http://127.0.0.1:${this.port}/${token}/?v=${cacheBuster}`);
   }
 
   dispose(): void {
@@ -93,21 +117,50 @@ export class PreviewServer implements vscode.Disposable {
     });
   }
 
+  private isHostAllowed(host: string | undefined): boolean {
+    if (!host || this.port === undefined) { return false; }
+    return host === `127.0.0.1:${this.port}` || host === `localhost:${this.port}`;
+  }
+
+  private applySecurityHeaders(res: http.ServerResponse): void {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Content-Security-Policy', CSP);
+  }
+
+  private reject(res: http.ServerResponse, statusCode: number, message: string): void {
+    this.applySecurityHeaders(res);
+    res.statusCode = statusCode;
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(message);
+  }
+
   private handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
     this.rearmIdleTimer();
 
+    if (!this.isHostAllowed(req.headers.host)) {
+      this.reject(res, 421, 'Misdirected request.');
+      return;
+    }
+
     const state = this.state;
     if (!state) {
-      res.statusCode = 503;
-      res.setHeader('Cache-Control', 'no-store');
-      res.end('Preview not ready.');
+      this.reject(res, 503, 'Preview not ready.');
       return;
     }
 
     const url = req.url ?? '/';
-    const pathname = url.split('?', 1)[0];
+    const rawPath = url.split('?', 1)[0];
+
+    const match = TOKEN_PREFIX_RE.exec(rawPath);
+    if (!match || match[1] !== state.token) {
+      this.reject(res, 404, 'Not found.');
+      return;
+    }
+    const pathname = match[2] ?? '/';
 
     if (pathname === '/' || pathname === '') {
+      this.applySecurityHeaders(res);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'no-store');
@@ -119,9 +172,7 @@ export class PreviewServer implements vscode.Disposable {
     try {
       decoded = decodeURIComponent(pathname);
     } catch {
-      res.statusCode = 400;
-      res.setHeader('Cache-Control', 'no-store');
-      res.end('Bad request.');
+      this.reject(res, 400, 'Bad request.');
       return;
     }
 
@@ -131,32 +182,58 @@ export class PreviewServer implements vscode.Disposable {
       ? state.rootDir
       : state.rootDir + path.sep;
     if (resolved !== state.rootDir && !resolved.startsWith(rootWithSep)) {
-      res.statusCode = 403;
-      res.setHeader('Cache-Control', 'no-store');
-      res.end('Forbidden.');
+      this.reject(res, 403, 'Forbidden.');
       return;
     }
 
-    fs.stat(resolved, (statErr, stats) => {
-      if (statErr || !stats.isFile()) {
-        res.statusCode = 404;
-        res.setHeader('Cache-Control', 'no-store');
-        res.end('Not found.');
+    fs.promises.realpath(resolved).then(real => {
+      const realRootWithSep = state.rootReal.endsWith(path.sep)
+        ? state.rootReal
+        : state.rootReal + path.sep;
+      if (real !== state.rootReal && !real.startsWith(realRootWithSep)) {
+        this.reject(res, 403, 'Forbidden.');
         return;
       }
-      const ext = path.extname(resolved).toLowerCase();
-      const mime = MIME_TYPES[ext] ?? 'application/octet-stream';
-      res.statusCode = 200;
-      res.setHeader('Content-Type', mime);
-      res.setHeader('Cache-Control', 'no-store');
-      const stream = fs.createReadStream(resolved);
-      stream.on('error', () => {
-        if (!res.headersSent) {
-          res.statusCode = 500;
+
+      const relFromRoot = path.relative(state.rootReal, real);
+      if (DENY_SEGMENT_RE.test(relFromRoot)) {
+        this.reject(res, 403, 'Forbidden.');
+        return;
+      }
+
+      const ext = path.extname(real).toLowerCase();
+      if (!ASSET_EXT_ALLOWLIST.has(ext)) {
+        this.reject(res, 403, 'Forbidden.');
+        return;
+      }
+
+      fs.promises.stat(real).then(stats => {
+        if (!stats.isFile()) {
+          this.reject(res, 404, 'Not found.');
+          return;
         }
-        res.end();
+        const mime = MIME_TYPES[ext] ?? 'application/octet-stream';
+        this.applySecurityHeaders(res);
+        res.statusCode = 200;
+        res.setHeader('Content-Type', mime);
+        res.setHeader('Cache-Control', 'no-store');
+        const stream = fs.createReadStream(real);
+        stream.on('error', () => {
+          if (!res.headersSent) {
+            res.statusCode = 500;
+          }
+          res.end();
+        });
+        stream.pipe(res);
+      }).catch(() => {
+        this.reject(res, 404, 'Not found.');
       });
-      stream.pipe(res);
+    }).catch((err: NodeJS.ErrnoException) => {
+      if (err && err.code === 'ENOENT') {
+        this.reject(res, 404, 'Not found.');
+      } else {
+        this.reject(res, 500, 'Server error.');
+      }
     });
   }
 
