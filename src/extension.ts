@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import MarkdownIt from 'markdown-it';
 import matter from 'gray-matter';
-import { PreviewServer } from './previewServer';
+import { PreviewServer, CONTENT_SECURITY_POLICY } from './previewServer';
 
 const md = new MarkdownIt({
   html: false,
@@ -31,7 +31,7 @@ export function renderMarkdown(body: string): string {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  const previewServer = new PreviewServer();
+  const previewServer = new PreviewServer({ extensionPath: context.extensionPath });
   context.subscriptions.push(previewServer);
 
   const cmd = vscode.commands.registerCommand(
@@ -94,6 +94,7 @@ function wrapHtmlDocument(title: string, css: string, body: string): string {
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="${CONTENT_SECURITY_POLICY}" />
   <title>${title}</title>
   <style>
     body { box-sizing: border-box; max-width: 980px; margin: 0 auto; padding: 32px; }
@@ -106,11 +107,7 @@ function wrapHtmlDocument(title: string, css: string, body: string): string {
 </head>
 <body class="markdown-body">
 ${body}
-<script type="module">
-  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-  const theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
-  mermaid.initialize({ startOnLoad: true, theme, securityLevel: 'strict' });
-</script>
+<script type="module" src="/_assets/mermaid-init.mjs"></script>
 </body>
 </html>`;
 }

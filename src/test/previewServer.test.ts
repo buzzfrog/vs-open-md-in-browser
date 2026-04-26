@@ -37,6 +37,35 @@ function httpGet(uri: vscode.Uri, pathOverride?: string): Promise<HttpResult> {
   });
 }
 
+function httpRequest(
+  uri: vscode.Uri,
+  options: { method?: string; path?: string; headers?: Record<string, string> } = {}
+): Promise<HttpResult> {
+  const [host, portStr] = uri.authority.split(':');
+  const port = Number.parseInt(portStr, 10);
+  const requestPath = options.path ?? (uri.path || '/');
+  return new Promise<HttpResult>((resolve, reject) => {
+    const req = http.request(
+      { host, port, path: requestPath, method: options.method ?? 'GET', headers: options.headers },
+      res => {
+        const chunks: Buffer[] = [];
+        res.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        res.on('end', () => {
+          resolve({
+            statusCode: res.statusCode ?? 0,
+            headers: res.headers,
+            body: Buffer.concat(chunks)
+          });
+        });
+        res.on('error', reject);
+      }
+    );
+    req.on('error', reject);
+    req.setTimeout(2000, () => req.destroy(new Error('httpRequest timeout')));
+    req.end();
+  });
+}
+
 suite('PreviewServer', () => {
   let tmpDir: string;
   let server: PreviewServer;
@@ -148,5 +177,122 @@ suite('PreviewServer', () => {
     const res = await httpGet(uri, '/');
     assert.strictEqual(res.statusCode, 200);
     assert.strictEqual(res.body.toString('utf8'), 'B');
+  });
+
+  test('symlink that targets file outside rootDir returns 403', async function () {
+    const outsidePath = path.join(os.tmpdir(), `omib-outside-${Date.now()}.txt`);
+    fs.writeFileSync(outsidePath, 'SECRET', 'utf8');
+    const linkPath = path.join(tmpDir, 'link.txt');
+    try {
+      try {
+        fs.symlinkSync(outsidePath, linkPath, 'file');
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === 'EPERM' || code === 'EACCES') {
+          this.skip();
+          return;
+        }
+        throw err;
+      }
+      const uri = await server.publish('<p>x</p>', tmpDir);
+      const res = await httpGet(uri, '/link.txt');
+      assert.strictEqual(res.statusCode, 403);
+      assert.notStrictEqual(res.body.toString('utf8'), 'SECRET');
+    } finally {
+      try { fs.unlinkSync(linkPath); } catch { /* ignore */ }
+      try { fs.unlinkSync(outsidePath); } catch { /* ignore */ }
+    }
+  });
+
+  test('non-loopback Host header returns 403', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    const res = await httpRequest(uri, { headers: { Host: 'attacker.example' } });
+    assert.strictEqual(res.statusCode, 403);
+  });
+
+  test('localhost Host header is accepted', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    const [, portStr] = uri.authority.split(':');
+    const res = await httpRequest(uri, { headers: { Host: `localhost:${portStr}` } });
+    assert.strictEqual(res.statusCode, 200);
+  });
+
+  test('POST / returns 405 with Allow: GET, HEAD', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    const res = await httpRequest(uri, { method: 'POST' });
+    assert.strictEqual(res.statusCode, 405);
+    assert.strictEqual(res.headers['allow'], 'GET, HEAD');
+  });
+
+  test('GET / returns hardening response headers', async () => {
+    const uri = await server.publish('<h1>x</h1>', tmpDir);
+    const res = await httpGet(uri, '/');
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.headers['x-content-type-options'], 'nosniff');
+    assert.strictEqual(res.headers['referrer-policy'], 'no-referrer');
+    const csp = res.headers['content-security-policy'];
+    assert.ok(typeof csp === 'string' && csp.includes("script-src 'self'"), 'CSP should restrict script-src to self');
+    assert.ok(!String(csp).includes('cdn.jsdelivr.net'), 'CSP should not whitelist CDN');
+  });
+
+  test('asset response includes nosniff and referrer-policy', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    const res = await httpGet(uri, '/asset.png');
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.headers['x-content-type-options'], 'nosniff');
+    assert.strictEqual(res.headers['referrer-policy'], 'no-referrer');
+  });
+
+  suite('asset routes', () => {
+    let extDir: string;
+    let assetServer: PreviewServer;
+
+    suiteSetup(() => {
+      extDir = fs.mkdtempSync(path.join(os.tmpdir(), 'omib-ext-'));
+      const distDir = path.join(extDir, 'node_modules', 'mermaid', 'dist');
+      fs.mkdirSync(distDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(distDir, 'mermaid.esm.min.mjs'),
+        'export default { name: "mermaid" };\n',
+        'utf8'
+      );
+    });
+
+    suiteTeardown(() => {
+      fs.rmSync(extDir, { recursive: true, force: true });
+    });
+
+    setup(() => {
+      assetServer = new PreviewServer({ idleShutdownMs: 50, extensionPath: extDir });
+    });
+
+    teardown(() => {
+      assetServer.dispose();
+    });
+
+    test('GET /_assets/mermaid.esm.min.mjs returns 200 with javascript content-type', async () => {
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      const res = await httpGet(uri, '/_assets/mermaid.esm.min.mjs');
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'application/javascript; charset=utf-8');
+      assert.ok(res.body.toString('utf8').includes('mermaid'), 'body should contain mermaid');
+    });
+
+    test('GET /_assets/something-else returns 404 (allow-list only)', async () => {
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      const res = await httpGet(uri, '/_assets/something-else.mjs');
+      assert.strictEqual(res.statusCode, 404);
+    });
+
+    test('asset route returns 404 when extensionPath is not configured', async () => {
+      const noExtServer = new PreviewServer({ idleShutdownMs: 50 });
+      try {
+        const uri = await noExtServer.publish('<p>x</p>', tmpDir);
+        const res = await httpGet(uri, '/_assets/mermaid.esm.min.mjs');
+        assert.strictEqual(res.statusCode, 404);
+      } finally {
+        noExtServer.dispose();
+      }
+    });
   });
 });
