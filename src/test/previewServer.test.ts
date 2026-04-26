@@ -217,6 +217,20 @@ suite('PreviewServer', () => {
     assert.strictEqual(res.statusCode, 200);
   });
 
+  test('addAllowedHost accepts a registered tunnel authority and rejects others', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    server.addAllowedHost('Example.Preview.App.GitHub.dev');
+
+    const accepted = await httpRequest(uri, { headers: { Host: 'example.preview.app.github.dev' } });
+    assert.strictEqual(accepted.statusCode, 200);
+
+    const acceptedMixed = await httpRequest(uri, { headers: { Host: 'EXAMPLE.preview.app.github.dev' } });
+    assert.strictEqual(acceptedMixed.statusCode, 200);
+
+    const rejected = await httpRequest(uri, { headers: { Host: 'malicious.example' } });
+    assert.strictEqual(rejected.statusCode, 403);
+  });
+
   test('POST / returns 405 with Allow: GET, HEAD', async () => {
     const uri = await server.publish('<p>x</p>', tmpDir);
     const res = await httpRequest(uri, { method: 'POST' });
@@ -241,6 +255,27 @@ suite('PreviewServer', () => {
     assert.strictEqual(res.statusCode, 200);
     assert.strictEqual(res.headers['x-content-type-options'], 'nosniff');
     assert.strictEqual(res.headers['referrer-policy'], 'no-referrer');
+  });
+
+  test('HEAD / returns 200, hardening headers, empty body', async () => {
+    const html = '<h1>HI</h1>';
+    const uri = await server.publish(html, tmpDir);
+    const res = await httpRequest(uri, { method: 'HEAD', path: '/' });
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.headers['content-type'], 'text/html; charset=utf-8');
+    assert.strictEqual(res.headers['x-content-type-options'], 'nosniff');
+    assert.ok(typeof res.headers['content-security-policy'] === 'string', 'CSP header should be present');
+    assert.strictEqual(res.body.length, 0);
+  });
+
+  test('HEAD /asset.png returns 200, image/png, content-length, empty body', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    const expectedSize = fs.statSync(path.join(tmpDir, 'asset.png')).size;
+    const res = await httpRequest(uri, { method: 'HEAD', path: '/asset.png' });
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.headers['content-type'], 'image/png');
+    assert.strictEqual(res.headers['content-length'], String(expectedSize));
+    assert.strictEqual(res.body.length, 0);
   });
 
   suite('asset routes', () => {
@@ -276,6 +311,17 @@ suite('PreviewServer', () => {
       assert.strictEqual(res.statusCode, 200);
       assert.strictEqual(res.headers['content-type'], 'application/javascript; charset=utf-8');
       assert.ok(res.body.toString('utf8').includes('mermaid'), 'body should contain mermaid');
+    });
+
+    test('HEAD /_assets/mermaid.esm.min.mjs returns 200, javascript content-type, empty body', async () => {
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      const assetPath = path.join(extDir, 'node_modules', 'mermaid', 'dist', 'mermaid.esm.min.mjs');
+      const expectedSize = fs.statSync(assetPath).size;
+      const res = await httpRequest(uri, { method: 'HEAD', path: '/_assets/mermaid.esm.min.mjs' });
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'application/javascript; charset=utf-8');
+      assert.strictEqual(res.headers['content-length'], String(expectedSize));
+      assert.strictEqual(res.body.length, 0);
     });
 
     test('GET /_assets/something-else returns 404 (allow-list only)', async () => {

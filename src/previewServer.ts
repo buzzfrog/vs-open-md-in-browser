@@ -78,6 +78,7 @@ export class PreviewServer implements vscode.Disposable {
   private readonly idleShutdownMs: number;
   private readonly extensionPath: string | undefined;
   private realExtensionPath: string | undefined;
+  private readonly extraAllowedHosts = new Set<string>();
 
   /**
    * `idleShutdownMs` exists primarily for tests; defaults to 5 minutes.
@@ -109,6 +110,24 @@ export class PreviewServer implements vscode.Disposable {
       this.server = undefined;
       this.port = undefined;
     }
+    this.extraAllowedHosts.clear();
+  }
+
+  /**
+   * Register an additional authority (`host[:port]`) that should be accepted
+   * by `isHostAllowed`. Matching is case-insensitive on the full authority.
+   * Used to whitelist the tunnel authority returned by
+   * `vscode.env.asExternalUri` in Remote / Codespaces.
+   */
+  addAllowedHost(authority: string): void {
+    if (typeof authority !== 'string') {
+      return;
+    }
+    const normalized = authority.trim().toLowerCase();
+    if (normalized.length === 0) {
+      return;
+    }
+    this.extraAllowedHosts.add(normalized);
   }
 
   private ensureStarted(): Promise<void> {
@@ -172,13 +191,17 @@ export class PreviewServer implements vscode.Disposable {
       res.statusCode = 200;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       setIndexHtmlHeaders(res);
+      if (method === 'HEAD') {
+        res.end();
+        return;
+      }
       res.end(state.html);
       return;
     }
 
     const assetRoute = ASSET_ROUTES[pathname];
     if (assetRoute) {
-      this.serveAsset(assetRoute, res);
+      this.serveAsset(assetRoute, method, res);
       return;
     }
 
@@ -239,7 +262,12 @@ export class PreviewServer implements vscode.Disposable {
         const mime = MIME_TYPES[ext] ?? 'application/octet-stream';
         res.statusCode = 200;
         res.setHeader('Content-Type', mime);
+        res.setHeader('Content-Length', String(stats.size));
         setCommonHeaders(res);
+        if (method === 'HEAD') {
+          res.end();
+          return;
+        }
         const stream = fs.createReadStream(realResolved);
         stream.on('error', () => {
           if (!res.headersSent) {
@@ -267,6 +295,10 @@ export class PreviewServer implements vscode.Disposable {
       hostname = hostHeader;
       portStr = undefined;
     }
+    const normalizedAuthority = hostHeader.toLowerCase();
+    if (this.extraAllowedHosts.has(normalizedAuthority)) {
+      return true;
+    }
     if (hostname !== '127.0.0.1' && hostname !== 'localhost') {
       return false;
     }
@@ -277,7 +309,7 @@ export class PreviewServer implements vscode.Disposable {
     return port === this.port;
   }
 
-  private serveAsset(route: AssetRoute, res: http.ServerResponse): void {
+  private serveAsset(route: AssetRoute, method: string, res: http.ServerResponse): void {
     if (!this.extensionPath) {
       res.statusCode = 404;
       setCommonHeaders(res);
@@ -319,7 +351,12 @@ export class PreviewServer implements vscode.Disposable {
           }
           res.statusCode = 200;
           res.setHeader('Content-Type', route.mime);
+          res.setHeader('Content-Length', String(stats.size));
           setCommonHeaders(res);
+          if (method === 'HEAD') {
+            res.end();
+            return;
+          }
           const stream = fs.createReadStream(realCandidate);
           stream.on('error', () => {
             if (!res.headersSent) {

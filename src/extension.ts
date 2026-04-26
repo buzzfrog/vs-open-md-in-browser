@@ -58,6 +58,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
         const localUri = await previewServer.publish(html, sourceDir);
         const externalUri = await vscode.env.asExternalUri(localUri);
+        previewServer.addAllowedHost(externalUri.authority);
         const ok = await vscode.env.openExternal(externalUri);
         if (!ok) {
           vscode.window.showErrorMessage(
