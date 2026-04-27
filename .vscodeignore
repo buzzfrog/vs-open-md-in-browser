@@ -6,6 +6,8 @@ out/**
 test/**
 node_modules/**
 !node_modules/github-markdown-css/**
+!node_modules/mermaid/package.json
+!node_modules/mermaid/dist/**
 **/*.ts
 **/*.map
 **/tsconfig*.json

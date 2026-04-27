@@ -4,6 +4,16 @@ All notable changes to the `open-md-in-browser` extension are documented in this
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.3.3 - 2026-04-26
+
+### Fixed
+
+* VSIX packaging now ships `node_modules/mermaid/dist/**` so Mermaid diagrams render in the Marketplace-installed extension. Local `F5` development was unaffected; this only changes the published artifact.
+
+### Internal
+
+* Added `npm run verify:package` to assert that the VSIX file list contains both `media/mermaid-init.mjs` and `node_modules/mermaid/dist/mermaid.esm.min.mjs`.
+
 ## 0.3.2 - 2026-04-23
 
 ### Fixed
