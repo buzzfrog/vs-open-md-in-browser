@@ -24,6 +24,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Type check
+        run: npm run check-types
+
+      - name: Test
+        run: npm test
+
       - name: Build (production)
         run: npm run package
 
