@@ -1,0 +1,34 @@
+/*
+ * Static preview styles served as a vendored asset under /_assets/preview.css
+ * so the document CSP can keep style-src restricted to 'self' for <style> /
+ * <link> elements. Inline style attributes (used by Mermaid SVG output) are
+ * still permitted via style-src-attr 'unsafe-inline' on the document.
+ */
+
+body {
+  box-sizing: border-box;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.frontmatter-table {
+  margin: 0 0 24px;
+  font-size: 90%;
+}
+
+.frontmatter-table th {
+  text-align: left;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.frontmatter-table code {
+  font-size: 90%;
+}
+
+pre.mermaid {
+  background: transparent;
+  padding: 0;
+  text-align: center;
+}
