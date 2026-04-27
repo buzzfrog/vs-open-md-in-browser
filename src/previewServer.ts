@@ -75,6 +75,30 @@ const ASSET_ROUTES: Record<string, AssetRoute> = {
   }
 };
 
+interface AssetPrefixRoute {
+  fsRelativeDir: string;
+  mime: string;
+  filenamePattern: RegExp;
+}
+
+// Prefix-based asset allow-list. Required because Mermaid v11 ships its ESM
+// entry (`mermaid.esm.min.mjs`) as a thin shim that statically and
+// dynamically imports per-diagram code from `./chunks/mermaid.esm.min/*.mjs`.
+// Listing every chunk filename in `ASSET_ROUTES` would be brittle across
+// upstream releases (chunk hashes change every version), so we whitelist the
+// directory prefix and constrain filenames with a strict pattern. Filenames
+// must match `[A-Za-z0-9_-]+\.mjs` so source maps (`*.mjs.map`) and any
+// path-traversal attempts (`/`, `..`, encoded separators) are rejected before
+// touching the filesystem; realpath containment in `serveAsset` provides
+// defense-in-depth against symlink escapes.
+const ASSET_PREFIX_ROUTES: Record<string, AssetPrefixRoute> = {
+  '/_assets/chunks/mermaid.esm.min/': {
+    fsRelativeDir: 'node_modules/mermaid/dist/chunks/mermaid.esm.min',
+    mime: 'application/javascript; charset=utf-8',
+    filenamePattern: /^[A-Za-z0-9_-]+\.mjs$/
+  }
+};
+
 interface PublishedState {
   html: string;
   rootDir: string;
@@ -110,6 +134,27 @@ function endResponse(res: http.ServerResponse, method: string, body?: string): v
 }
 
 const PORT_PATTERN = /^\d+$/;
+
+function resolveAssetPrefix(pathname: string): AssetRoute | undefined {
+  for (const [prefix, route] of Object.entries(ASSET_PREFIX_ROUTES)) {
+    if (!pathname.startsWith(prefix)) {
+      continue;
+    }
+    const filename = pathname.slice(prefix.length);
+    if (!route.filenamePattern.test(filename)) {
+      // Strict pattern rejects path separators, parent-dir tokens, and any
+      // extension other than the expected one (e.g. `*.mjs.map`). Returning
+      // `undefined` here is converted to a 404 by the caller, matching the
+      // fail-closed contract of the static allow-list.
+      return undefined;
+    }
+    return {
+      fsRelative: path.posix.join(route.fsRelativeDir, filename),
+      mime: route.mime
+    };
+  }
+  return undefined;
+}
 
 export class PreviewServer implements vscode.Disposable {
   private server: http.Server | undefined;
@@ -266,6 +311,22 @@ export class PreviewServer implements vscode.Disposable {
     const assetRoute = ASSET_ROUTES[pathname];
     if (assetRoute) {
       this.serveAsset(assetRoute, method, res);
+      return;
+    }
+
+    const prefixAsset = resolveAssetPrefix(pathname);
+    if (prefixAsset) {
+      this.serveAsset(prefixAsset, method, res);
+      return;
+    }
+
+    if (pathname.startsWith('/_assets/')) {
+      // Any other `/_assets/` request is not in the allow-list. Fail closed
+      // with 404 so we never fall through to the workspace file handler for
+      // reserved asset paths.
+      res.statusCode = 404;
+      setCommonHeaders(res);
+      endResponse(res, method, 'Not found.');
       return;
     }
 

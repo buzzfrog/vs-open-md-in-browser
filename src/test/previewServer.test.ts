@@ -407,6 +407,21 @@ suite('PreviewServer', () => {
         '.markdown-body { color: black; }\n',
         'utf8'
       );
+      // Mermaid v11 chunk fixtures: the ESM entry shim imports per-diagram
+      // chunks dynamically, so the server must serve files under
+      // `/_assets/chunks/mermaid.esm.min/`.
+      const chunksDir = path.join(distDir, 'chunks', 'mermaid.esm.min');
+      fs.mkdirSync(chunksDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(chunksDir, 'chunk-ABC123.mjs'),
+        'export const chunk = "mermaid-chunk";\n',
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(chunksDir, 'chunk-ABC123.mjs.map'),
+        '{}\n',
+        'utf8'
+      );
     });
 
     suiteTeardown(() => {
@@ -459,6 +474,43 @@ suite('PreviewServer', () => {
     test('GET /_assets/something-else returns 404 (allow-list only)', async () => {
       const uri = await assetServer.publish('<p>x</p>', tmpDir);
       const res = await httpGet(uri, '/_assets/something-else.mjs');
+      assert.strictEqual(res.statusCode, 404);
+    });
+
+    test('GET /_assets/chunks/mermaid.esm.min/<name>.mjs serves chunk file', async () => {
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      const res = await httpGet(uri, '/_assets/chunks/mermaid.esm.min/chunk-ABC123.mjs');
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'application/javascript; charset=utf-8');
+      assert.ok(res.body.toString('utf8').includes('mermaid-chunk'), 'body should contain chunk content');
+    });
+
+    test('GET /_assets/chunks/mermaid.esm.min/<name>.mjs.map is rejected (404)', async () => {
+      // Source maps are present on disk but excluded by the strict filename
+      // pattern; allowing `.mjs.map` would broaden the surface unnecessarily.
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      const res = await httpGet(uri, '/_assets/chunks/mermaid.esm.min/chunk-ABC123.mjs.map');
+      assert.strictEqual(res.statusCode, 404);
+    });
+
+    test('GET /_assets/chunks/mermaid.esm.min/missing.mjs returns 404', async () => {
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      const res = await httpGet(uri, '/_assets/chunks/mermaid.esm.min/chunk-MISSING.mjs');
+      assert.strictEqual(res.statusCode, 404);
+    });
+
+    test('GET /_assets/chunks/mermaid.esm.min/ traversal attempt is rejected', async () => {
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      // URL-encoded `/` would let an attacker climb out of the chunks dir if
+      // the filename pattern allowed it; the pattern denies any non-word
+      // characters before the request reaches the filesystem.
+      const res = await httpGet(uri, '/_assets/chunks/mermaid.esm.min/%2e%2e%2fmermaid.esm.min.mjs');
+      assert.strictEqual(res.statusCode, 404);
+    });
+
+    test('GET /_assets/chunks/unknown-prefix/file.mjs returns 404 (prefix allow-list)', async () => {
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      const res = await httpGet(uri, '/_assets/chunks/unknown-prefix/file.mjs');
       assert.strictEqual(res.statusCode, 404);
     });
 

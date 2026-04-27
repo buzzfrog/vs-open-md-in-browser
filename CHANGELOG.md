@@ -4,6 +4,13 @@ All notable changes to the `open-md-in-browser` extension are documented in this
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.3.4 - 2026-04-27
+
+### Fixed
+
+* Mermaid diagrams render again. Mermaid v11 ships its ESM entry as a thin shim that statically and dynamically imports per-diagram chunks from `./chunks/mermaid.esm.min/*.mjs`; the preview server now serves those chunk files under `/_assets/chunks/mermaid.esm.min/<name>.mjs` (strict allow-list with `^[A-Za-z0-9_-]+\.mjs$` filename pattern and realpath containment).
+* Any unrecognised `/_assets/...` request now fails closed with 404 instead of falling through to the workspace file handler.
+
 ## 0.3.3 - 2026-04-26
 
 ### Fixed
