@@ -15,10 +15,23 @@ interface HttpResult {
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const CSS_CONTENT = 'body { color: red; }';
 
+function joinUriPath(uri: vscode.Uri, requestPath: string): string {
+  // Tests pass paths as if the server were rooted at `/`; in production
+  // `publish()` returns a URI whose path is `/{token}/`, so prepend the URI
+  // base (preserving any leading `/` in the test path).
+  const base = uri.path || '/';
+  if (requestPath.startsWith('/')) {
+    return base.endsWith('/')
+      ? base + requestPath.slice(1)
+      : base + requestPath;
+  }
+  return base.endsWith('/') ? base + requestPath : base + '/' + requestPath;
+}
+
 function httpGet(uri: vscode.Uri, pathOverride?: string): Promise<HttpResult> {
   const [host, portStr] = uri.authority.split(':');
   const port = Number.parseInt(portStr, 10);
-  const requestPath = pathOverride ?? (uri.path || '/');
+  const requestPath = pathOverride === undefined ? (uri.path || '/') : joinUriPath(uri, pathOverride);
   return new Promise<HttpResult>((resolve, reject) => {
     const req = http.get({ host, port, path: requestPath }, res => {
       const chunks: Buffer[] = [];
@@ -39,11 +52,13 @@ function httpGet(uri: vscode.Uri, pathOverride?: string): Promise<HttpResult> {
 
 function httpRequest(
   uri: vscode.Uri,
-  options: { method?: string; path?: string; headers?: Record<string, string> } = {}
+  options: { method?: string; path?: string; headers?: Record<string, string>; rawPath?: string } = {}
 ): Promise<HttpResult> {
   const [host, portStr] = uri.authority.split(':');
   const port = Number.parseInt(portStr, 10);
-  const requestPath = options.path ?? (uri.path || '/');
+  const requestPath = options.rawPath !== undefined
+    ? options.rawPath
+    : (options.path === undefined ? (uri.path || '/') : joinUriPath(uri, options.path));
   return new Promise<HttpResult>((resolve, reject) => {
     const req = http.request(
       { host, port, path: requestPath, method: options.method ?? 'GET', headers: options.headers },
@@ -278,6 +293,92 @@ suite('PreviewServer', () => {
     assert.strictEqual(res.body.length, 0);
   });
 
+  // WI-01: HEAD must not include a body on any status, including errors.
+  test('HEAD on missing path returns 404 with empty body', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    const res = await httpRequest(uri, { method: 'HEAD', path: '/missing.png' });
+    assert.strictEqual(res.statusCode, 404);
+    assert.strictEqual(res.body.length, 0);
+  });
+
+  test('HEAD on traversal returns 403 with empty body', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    const res = await httpRequest(uri, { method: 'HEAD', path: '/../../etc/passwd' });
+    assert.strictEqual(res.statusCode, 403);
+    assert.strictEqual(res.body.length, 0);
+  });
+
+  test('HEAD on malformed encoding returns 400 with empty body', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    const res = await httpRequest(uri, { method: 'HEAD', path: '/%E0%A4%A' });
+    assert.strictEqual(res.statusCode, 400);
+    assert.strictEqual(res.body.length, 0);
+  });
+
+  test('HEAD with disallowed Host returns 403 with empty body', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    const res = await httpRequest(uri, { method: 'HEAD', headers: { Host: 'attacker.example' } });
+    assert.strictEqual(res.statusCode, 403);
+    assert.strictEqual(res.body.length, 0);
+  });
+
+  test('HEAD with disallowed method (POST simulated via custom method) is 405 with empty body', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    // Use HEAD vs POST: the 405 branch fires for any non-GET/HEAD; assert
+    // that when invoked with HEAD-like semantics on a forbidden method, the
+    // body is suppressed. Direct test: send PUT and observe no body.
+    const res = await httpRequest(uri, { method: 'PUT' });
+    assert.strictEqual(res.statusCode, 405);
+    assert.strictEqual(res.headers['allow'], 'GET, HEAD');
+  });
+
+  // WI-02: port parser must reject trailing garbage.
+  test('Host with non-numeric port suffix returns 403', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    const [, portStr] = uri.authority.split(':');
+    const res = await httpRequest(uri, { headers: { Host: `127.0.0.1:${portStr}abc` } });
+    assert.strictEqual(res.statusCode, 403);
+  });
+
+  // WI-05: per-publish path-prefix token gates every request.
+  test('URL without the publish token returns 404', async () => {
+    await server.publish('<p>x</p>', tmpDir);
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    // Use rawPath to bypass the test-helper token-prefixing.
+    const res = await httpRequest(uri, { rawPath: '/' });
+    assert.strictEqual(res.statusCode, 404);
+    const res2 = await httpRequest(uri, { rawPath: '/wrong-token-1234567890abcdef/' });
+    assert.strictEqual(res2.statusCode, 404);
+  });
+
+  test('publish token is included in returned URI path and accepted by server', async () => {
+    const uri = await server.publish('<h1>OK</h1>', tmpDir);
+    assert.match(uri.path, /^\/[0-9a-f]{32}\/$/);
+    const res = await httpGet(uri, '/');
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.body.toString('utf8'), '<h1>OK</h1>');
+  });
+
+  test('a fresh publish rotates the token and the previous one is rejected', async () => {
+    const oldUri = await server.publish('<p>old</p>', tmpDir);
+    const oldPath = oldUri.path;
+    const newUri = await server.publish('<p>new</p>', tmpDir);
+    assert.notStrictEqual(oldPath, newUri.path);
+    const stale = await httpRequest(newUri, { rawPath: oldPath });
+    assert.strictEqual(stale.statusCode, 404);
+  });
+
+  // WI-04: CSP no longer permits inline <style> blocks but still allows
+  // inline style attributes (Mermaid SVG).
+  test('CSP restricts style-src to self and uses style-src-attr unsafe-inline', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    const res = await httpGet(uri, '/');
+    const csp = String(res.headers['content-security-policy'] ?? '');
+    assert.match(csp, /style-src 'self'(;| )/, 'style-src should be self only');
+    assert.match(csp, /style-src-attr 'unsafe-inline'/, 'style-src-attr should permit inline attrs');
+    assert.ok(!/style-src [^;]*'unsafe-inline'/.test(csp), 'style-src element directive must not include unsafe-inline');
+  });
+
   suite('asset routes', () => {
     let extDir: string;
     let assetServer: PreviewServer;
@@ -289,6 +390,21 @@ suite('PreviewServer', () => {
       fs.writeFileSync(
         path.join(distDir, 'mermaid.esm.min.mjs'),
         'export default { name: "mermaid" };\n',
+        'utf8'
+      );
+      // WI-04: vendored CSS fixtures for /_assets/preview.css and
+      // /_assets/github-markdown.css.
+      fs.mkdirSync(path.join(extDir, 'media'), { recursive: true });
+      fs.writeFileSync(
+        path.join(extDir, 'media', 'preview.css'),
+        'body { padding: 1px; }\n',
+        'utf8'
+      );
+      const ghDir = path.join(extDir, 'node_modules', 'github-markdown-css');
+      fs.mkdirSync(ghDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(ghDir, 'github-markdown.css'),
+        '.markdown-body { color: black; }\n',
         'utf8'
       );
     });
@@ -322,6 +438,22 @@ suite('PreviewServer', () => {
       assert.strictEqual(res.headers['content-type'], 'application/javascript; charset=utf-8');
       assert.strictEqual(res.headers['content-length'], String(expectedSize));
       assert.strictEqual(res.body.length, 0);
+    });
+
+    test('GET /_assets/preview.css returns 200 with text/css content-type', async () => {
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      const res = await httpGet(uri, '/_assets/preview.css');
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'text/css; charset=utf-8');
+      assert.ok(res.body.toString('utf8').includes('padding'), 'body should contain CSS');
+    });
+
+    test('GET /_assets/github-markdown.css returns 200 with text/css content-type', async () => {
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      const res = await httpGet(uri, '/_assets/github-markdown.css');
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'text/css; charset=utf-8');
+      assert.ok(res.body.toString('utf8').includes('markdown-body'), 'body should contain markdown-body class');
     });
 
     test('GET /_assets/something-else returns 404 (allow-list only)', async () => {

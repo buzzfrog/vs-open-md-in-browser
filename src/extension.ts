@@ -53,8 +53,7 @@ export function activate(context: vscode.ExtensionContext): void {
           ? data.title
           : path.basename(sourcePath);
         const title = escapeHtml(titleText);
-        const css = loadGithubMarkdownCss(context);
-        const html = wrapHtmlDocument(title, css, bodyHtml);
+        const html = wrapHtmlDocument(title, bodyHtml);
 
         const localUri = await previewServer.publish(html, sourceDir);
         const externalUri = await vscode.env.asExternalUri(localUri);
@@ -90,41 +89,25 @@ async function resolveTarget(uri?: vscode.Uri): Promise<vscode.Uri | undefined> 
   return undefined;
 }
 
-function wrapHtmlDocument(title: string, css: string, body: string): string {
+function wrapHtmlDocument(title: string, body: string): string {
+  // Stylesheets and scripts use document-relative paths so they inherit the
+  // per-publish path-prefix token assigned by `PreviewServer.publish` and the
+  // CSP `style-src 'self' / script-src 'self'` directives are satisfied
+  // without inline blocks.
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="${CONTENT_SECURITY_POLICY}" />
   <title>${title}</title>
-  <style>
-    body { box-sizing: border-box; max-width: 980px; margin: 0 auto; padding: 32px; }
-    .frontmatter-table { margin: 0 0 24px; font-size: 90%; }
-    .frontmatter-table th { text-align: left; white-space: nowrap; width: 1%; }
-    .frontmatter-table code { font-size: 90%; }
-    pre.mermaid { background: transparent; padding: 0; text-align: center; }
-    ${css}
-  </style>
+  <link rel="stylesheet" href="_assets/github-markdown.css" />
+  <link rel="stylesheet" href="_assets/preview.css" />
 </head>
 <body class="markdown-body">
 ${body}
-<script type="module" src="/_assets/mermaid-init.mjs"></script>
+<script type="module" src="_assets/mermaid-init.mjs"></script>
 </body>
 </html>`;
-}
-
-function loadGithubMarkdownCss(context: vscode.ExtensionContext): string {
-  const cssPath = path.join(
-    context.extensionPath,
-    'node_modules',
-    'github-markdown-css',
-    'github-markdown.css'
-  );
-  try {
-    return fs.readFileSync(cssPath, 'utf8');
-  } catch {
-    return '/* github-markdown-css not found; falling back to no styles */';
-  }
 }
 
 function escapeHtml(s: string): string {

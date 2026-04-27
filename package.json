@@ -87,7 +87,7 @@
     "compile-tests": "tsc -p . --outDir out",
     "test": "vscode-test",
     "lint": "eslint src",
-    "verify:package": "node -e \"const{execFileSync}=require('child_process');const out=execFileSync('npx',['--yes','@vscode/vsce','ls'],{encoding:'utf8',shell:process.platform==='win32'});const required=['media/mermaid-init.mjs','node_modules/mermaid/dist/mermaid.esm.min.mjs'];const missing=required.filter(p=>!out.split(/\\r?\\n/).includes(p));if(missing.length){console.error('Missing from VSIX:\\n'+missing.map(m=>'  '+m).join('\\n'));process.exit(1);}console.log('VSIX contents OK:\\n'+required.map(m=>'  '+m).join('\\n'));\""
+    "verify:package": "node -e \"const{execFileSync}=require('child_process');const out=execFileSync('npx',['--yes','@vscode/vsce','ls'],{encoding:'utf8',shell:process.platform==='win32'});const required=['media/mermaid-init.mjs','media/preview.css','node_modules/mermaid/dist/mermaid.esm.min.mjs','node_modules/github-markdown-css/github-markdown.css'];const missing=required.filter(p=>!out.split(/\\r?\\n/).includes(p));if(missing.length){console.error('Missing from VSIX:\\n'+missing.map(m=>'  '+m).join('\\n'));process.exit(1);}console.log('VSIX contents OK:\\n'+required.map(m=>'  '+m).join('\\n'));\""
   },
   "dependencies": {
     "github-markdown-css": "^5.5.1",

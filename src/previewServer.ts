@@ -1,6 +1,7 @@
 import * as http from 'node:http';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as crypto from 'node:crypto';
 import * as vscode from 'vscode';
 
 const IDLE_SHUTDOWN_MS = 5 * 60 * 1000;
@@ -27,8 +28,26 @@ const MIME_TYPES: Record<string, string> = {
 };
 
 const ALLOWED_METHODS = 'GET, HEAD';
+
+// `style-src 'self'` blocks inline <style> blocks and only permits stylesheet
+// elements loaded from same-origin (now satisfied by vendoring github-markdown
+// and preview CSS as /_assets/). `style-src-attr 'unsafe-inline'` is still
+// required because Mermaid emits inline `style="..."` attributes on rendered
+// SVG nodes; CSP3 separates element vs. attribute style sources, and
+// tightening attrs would require per-element hashes that are infeasible for
+// dynamic SVG output.
+//
+// Browser-compat note (F-CSP): `style-src-attr` is a CSP Level 3 directive
+// supported by current Chromium / Firefox / Edge (and therefore the Electron
+// runtime that ships with supported VS Code versions). Older user agents that
+// pre-date CSP3 ignore `style-src-attr` and fall back to `style-src` for both
+// element and attribute styles; because `style-src` here is `'self'` (no
+// `'unsafe-inline'`), Mermaid's inline SVG attribute styles will be stripped
+// in those legacy browsers rather than executing unsafely. This is the
+// preferred fail-closed behaviour and is acceptable given the extension's
+// supported runtime; do not loosen `style-src` to restore legacy rendering.
 export const CONTENT_SECURITY_POLICY =
-  "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+  "default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; " +
   "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; " +
   "object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 
@@ -45,6 +64,14 @@ const ASSET_ROUTES: Record<string, AssetRoute> = {
   '/_assets/mermaid-init.mjs': {
     fsRelative: 'media/mermaid-init.mjs',
     mime: 'application/javascript; charset=utf-8'
+  },
+  '/_assets/preview.css': {
+    fsRelative: 'media/preview.css',
+    mime: 'text/css; charset=utf-8'
+  },
+  '/_assets/github-markdown.css': {
+    fsRelative: 'node_modules/github-markdown-css/github-markdown.css',
+    mime: 'text/css; charset=utf-8'
   }
 };
 
@@ -52,6 +79,7 @@ interface PublishedState {
   html: string;
   rootDir: string;
   realRootDir: string;
+  token: string;
 }
 
 export interface PreviewServerOptions {
@@ -69,6 +97,19 @@ function setIndexHtmlHeaders(res: http.ServerResponse): void {
   setCommonHeaders(res);
   res.setHeader('Content-Security-Policy', CONTENT_SECURITY_POLICY);
 }
+
+// Centralised response terminator (WI-01). HEAD responses (RFC 9110 §9.3.2)
+// MUST NOT include a message body on any status code, so this helper drops the
+// body for HEAD on every branch (success and error alike).
+function endResponse(res: http.ServerResponse, method: string, body?: string): void {
+  if (method === 'HEAD' || body === undefined) {
+    res.end();
+    return;
+  }
+  res.end(body);
+}
+
+const PORT_PATTERN = /^\d+$/;
 
 export class PreviewServer implements vscode.Disposable {
   private server: http.Server | undefined;
@@ -93,11 +134,17 @@ export class PreviewServer implements vscode.Disposable {
   async publish(html: string, rootDir: string): Promise<vscode.Uri> {
     const resolvedRoot = path.resolve(rootDir);
     const realRoot = await fs.promises.realpath(resolvedRoot);
-    this.state = { html, rootDir: resolvedRoot, realRootDir: realRoot };
+    // Per-publish path-prefix token (WI-05). Defense-in-depth against
+    // DNS-rebinding-style attackers: even if Host validation is bypassed, the
+    // attacker cannot reach any preview content without guessing the token.
+    // 128 bits of entropy, hex-encoded so it is URL-safe and survives all
+    // path-segment escaping rules.
+    const token = crypto.randomBytes(16).toString('hex');
+    this.state = { html, rootDir: resolvedRoot, realRootDir: realRoot, token };
     await this.ensureStarted();
     this.rearmIdleTimer();
     const cacheBuster = Date.now().toString(36);
-    return vscode.Uri.parse(`http://127.0.0.1:${this.port}/?v=${cacheBuster}`);
+    return vscode.Uri.parse(`http://127.0.0.1:${this.port}/${token}/?v=${cacheBuster}`);
   }
 
   dispose(): void {
@@ -165,14 +212,14 @@ export class PreviewServer implements vscode.Disposable {
       res.statusCode = 405;
       res.setHeader('Allow', ALLOWED_METHODS);
       setCommonHeaders(res);
-      res.end('Method not allowed.');
+      endResponse(res, method, 'Method not allowed.');
       return;
     }
 
     if (!this.isHostAllowed(req.headers.host)) {
       res.statusCode = 403;
       setCommonHeaders(res);
-      res.end('Forbidden.');
+      endResponse(res, method, 'Forbidden.');
       return;
     }
 
@@ -180,12 +227,29 @@ export class PreviewServer implements vscode.Disposable {
     if (!state) {
       res.statusCode = 503;
       setCommonHeaders(res);
-      res.end('Preview not ready.');
+      endResponse(res, method, 'Preview not ready.');
       return;
     }
 
     const url = req.url ?? '/';
-    const pathname = url.split('?', 1)[0];
+    const rawPathname = url.split('?', 1)[0];
+
+    // Validate and strip the per-publish path-prefix token (WI-05). Any
+    // request without the exact prefix returns 404 so the token is not
+    // leaked through differential responses (404 for both wrong-token and
+    // unknown-route).
+    const tokenPrefix = `/${state.token}/`;
+    let pathname: string;
+    if (rawPathname === `/${state.token}` || rawPathname === tokenPrefix) {
+      pathname = '/';
+    } else if (rawPathname.startsWith(tokenPrefix)) {
+      pathname = '/' + rawPathname.slice(tokenPrefix.length);
+    } else {
+      res.statusCode = 404;
+      setCommonHeaders(res);
+      endResponse(res, method, 'Not found.');
+      return;
+    }
 
     if (pathname === '/' || pathname === '') {
       res.statusCode = 200;
@@ -211,7 +275,7 @@ export class PreviewServer implements vscode.Disposable {
     } catch {
       res.statusCode = 400;
       setCommonHeaders(res);
-      res.end('Bad request.');
+      endResponse(res, method, 'Bad request.');
       return;
     }
 
@@ -220,10 +284,15 @@ export class PreviewServer implements vscode.Disposable {
     const rootWithSep = state.rootDir.endsWith(path.sep)
       ? state.rootDir
       : state.rootDir + path.sep;
+    // Lexical containment check kept as defense-in-depth alongside the
+    // realpath check below (WI-03). The realpath check is the authoritative
+    // guard against symlink escapes; the lexical check fails closed cheaply
+    // before any filesystem I/O for the common `..` traversal case and limits
+    // the attack surface for any future bug in `fs.realpath` callback paths.
     if (resolved !== state.rootDir && !resolved.startsWith(rootWithSep)) {
       res.statusCode = 403;
       setCommonHeaders(res);
-      res.end('Forbidden.');
+      endResponse(res, method, 'Forbidden.');
       return;
     }
 
@@ -233,12 +302,12 @@ export class PreviewServer implements vscode.Disposable {
         if (code === 'ENOENT' || code === 'ENOTDIR') {
           res.statusCode = 404;
           setCommonHeaders(res);
-          res.end('Not found.');
+          endResponse(res, method, 'Not found.');
           return;
         }
         res.statusCode = 500;
         setCommonHeaders(res);
-        res.end('Server error.');
+        endResponse(res, method, 'Server error.');
         return;
       }
 
@@ -247,7 +316,7 @@ export class PreviewServer implements vscode.Disposable {
       if (realResolved !== realRoot && !realResolved.startsWith(realRootWithSep)) {
         res.statusCode = 403;
         setCommonHeaders(res);
-        res.end('Forbidden.');
+        endResponse(res, method, 'Forbidden.');
         return;
       }
 
@@ -255,7 +324,7 @@ export class PreviewServer implements vscode.Disposable {
         if (statErr || !stats.isFile()) {
           res.statusCode = 404;
           setCommonHeaders(res);
-          res.end('Not found.');
+          endResponse(res, method, 'Not found.');
           return;
         }
         const ext = path.extname(realResolved).toLowerCase();
@@ -305,6 +374,12 @@ export class PreviewServer implements vscode.Disposable {
     if (portStr === undefined || portStr === '') {
       return false;
     }
+    // Strict numeric match (WI-02). `Number.parseInt` would accept trailing
+    // garbage like "8080abc", so anchor a digit-only pattern to the full
+    // string before parsing.
+    if (!PORT_PATTERN.test(portStr)) {
+      return false;
+    }
     const port = Number.parseInt(portStr, 10);
     return port === this.port;
   }
@@ -313,7 +388,7 @@ export class PreviewServer implements vscode.Disposable {
     if (!this.extensionPath) {
       res.statusCode = 404;
       setCommonHeaders(res);
-      res.end('Not found.');
+      endResponse(res, method, 'Not found.');
       return;
     }
 
@@ -327,26 +402,26 @@ export class PreviewServer implements vscode.Disposable {
           if (code === 'ENOENT' || code === 'ENOTDIR') {
             res.statusCode = 404;
             setCommonHeaders(res);
-            res.end('Not found.');
+            endResponse(res, method, 'Not found.');
             return;
           }
           res.statusCode = 500;
           setCommonHeaders(res);
-          res.end('Server error.');
+          endResponse(res, method, 'Server error.');
           return;
         }
         const realExtWithSep = realExtPath.endsWith(path.sep) ? realExtPath : realExtPath + path.sep;
         if (realCandidate !== realExtPath && !realCandidate.startsWith(realExtWithSep)) {
           res.statusCode = 403;
           setCommonHeaders(res);
-          res.end('Forbidden.');
+          endResponse(res, method, 'Forbidden.');
           return;
         }
         fs.stat(realCandidate, (statErr, stats) => {
           if (statErr || !stats.isFile()) {
             res.statusCode = 404;
             setCommonHeaders(res);
-            res.end('Not found.');
+            endResponse(res, method, 'Not found.');
             return;
           }
           res.statusCode = 200;
@@ -377,7 +452,7 @@ export class PreviewServer implements vscode.Disposable {
       if (realErr) {
         res.statusCode = 500;
         setCommonHeaders(res);
-        res.end('Server error.');
+        endResponse(res, method, 'Server error.');
         return;
       }
       this.realExtensionPath = realExtPath;
