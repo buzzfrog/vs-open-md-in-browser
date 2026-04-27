@@ -111,12 +111,20 @@ ${body}
 }
 
 function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!
+  return s.replace(/[&<>]/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!
   );
 }
 
 export function extractFrontmatter(source: string): { body: string; data: Record<string, unknown> } {
+  // Guard against thematic breaks (--- without a closing ---/... delimiter):
+  // only invoke gray-matter when the source has a valid frontmatter block.
+  const stripped = source.startsWith('\uFEFF') ? source.slice(1) : source;
+  const lines = stripped.replace(/\r\n/g, '\n').split('\n');
+  const hasClosingDelimiter = lines[0] === '---' && lines.slice(1).some(l => l === '---' || l === '...');
+  if (!hasClosingDelimiter) {
+    return { body: source, data: {} };
+  }
   const parsed = matter(source);
   return { body: parsed.content, data: (parsed.data ?? {}) as Record<string, unknown> };
 }
