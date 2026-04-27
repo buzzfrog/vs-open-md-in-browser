@@ -119,6 +119,8 @@ function escapeHtml(s: string): string {
 export function extractFrontmatter(source: string): { body: string; data: Record<string, unknown> } {
   // Guard against thematic breaks (--- without a closing ---/... delimiter):
   // only invoke gray-matter when the source has a valid frontmatter block.
+  // Strip BOM (Byte Order Mark) that some editors prepend to UTF-8 files before
+  // checking the first line, so `---` is still recognised as the opening delimiter.
   const stripped = source.startsWith('\uFEFF') ? source.slice(1) : source;
   const lines = stripped.replace(/\r\n/g, '\n').split('\n');
   const hasClosingDelimiter = lines[0] === '---' && lines.slice(1).some(l => l === '---' || l === '...');
