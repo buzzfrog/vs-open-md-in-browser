@@ -2,7 +2,7 @@
   "name": "open-md-in-browser",
   "displayName": "Open Markdown in Browser",
   "description": "Render the current Markdown file as HTML and open it in your default web browser.",
-  "version": "0.3.4",
+  "version": "0.3.6",
   "publisher": "your-publisher-id",
   "license": "MIT",
   "engines": {

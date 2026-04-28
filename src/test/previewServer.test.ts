@@ -368,15 +368,15 @@ suite('PreviewServer', () => {
     assert.strictEqual(stale.statusCode, 404);
   });
 
-  // WI-04: CSP no longer permits inline <style> blocks but still allows
-  // inline style attributes (Mermaid SVG).
-  test('CSP restricts style-src to self and uses style-src-attr unsafe-inline', async () => {
+  // Mermaid v11 injects both inline style attributes and <style> elements
+  // inside rendered SVGs, so style-src must include 'unsafe-inline'.
+  // frame-ancestors is only valid as an HTTP header, not in <meta> tags.
+  test('CSP allows unsafe-inline styles and includes frame-ancestors in header', async () => {
     const uri = await server.publish('<p>x</p>', tmpDir);
     const res = await httpGet(uri, '/');
     const csp = String(res.headers['content-security-policy'] ?? '');
-    assert.match(csp, /style-src 'self'(;| )/, 'style-src should be self only');
-    assert.match(csp, /style-src-attr 'unsafe-inline'/, 'style-src-attr should permit inline attrs');
-    assert.ok(!/style-src [^;]*'unsafe-inline'/.test(csp), 'style-src element directive must not include unsafe-inline');
+    assert.match(csp, /style-src 'self' 'unsafe-inline'/, 'style-src should include unsafe-inline for Mermaid');
+    assert.match(csp, /frame-ancestors 'none'/, 'HTTP header CSP should include frame-ancestors');
   });
 
   suite('asset routes', () => {

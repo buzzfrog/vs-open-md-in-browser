@@ -29,27 +29,24 @@ const MIME_TYPES: Record<string, string> = {
 
 const ALLOWED_METHODS = 'GET, HEAD';
 
-// `style-src 'self'` blocks inline <style> blocks and only permits stylesheet
-// elements loaded from same-origin (now satisfied by vendoring github-markdown
-// and preview CSS as /_assets/). `style-src-attr 'unsafe-inline'` is still
-// required because Mermaid emits inline `style="..."` attributes on rendered
-// SVG nodes; CSP3 separates element vs. attribute style sources, and
-// tightening attrs would require per-element hashes that are infeasible for
-// dynamic SVG output.
+// `style-src 'self' 'unsafe-inline'` is required because Mermaid v11 injects
+// both inline `style="..."` attributes and `<style>` elements inside its
+// rendered SVG output. Nonces/hashes are infeasible for dynamically generated
+// SVG styles, so `'unsafe-inline'` is the only viable option.
 //
-// Browser-compat note (F-CSP): `style-src-attr` is a CSP Level 3 directive
-// supported by current Chromium / Firefox / Edge (and therefore the Electron
-// runtime that ships with supported VS Code versions). Older user agents that
-// pre-date CSP3 ignore `style-src-attr` and fall back to `style-src` for both
-// element and attribute styles; because `style-src` here is `'self'` (no
-// `'unsafe-inline'`), Mermaid's inline SVG attribute styles will be stripped
-// in those legacy browsers rather than executing unsafely. This is the
-// preferred fail-closed behaviour and is acceptable given the extension's
-// supported runtime; do not loosen `style-src` to restore legacy rendering.
+// Two CSP strings are exported:
+// - `CONTENT_SECURITY_POLICY` — used in the `<meta>` tag. Excludes
+//   `frame-ancestors` because the spec mandates that directive is ignored
+//   when delivered via `<meta>` (browsers log a console warning).
+// - `CONTENT_SECURITY_POLICY_HEADER` — used in the HTTP response header.
+//   Adds `frame-ancestors 'none'` which is only effective as a header.
 export const CONTENT_SECURITY_POLICY =
-  "default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; " +
+  "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; " +
-  "object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+  "object-src 'none'; base-uri 'none'";
+
+export const CONTENT_SECURITY_POLICY_HEADER =
+  CONTENT_SECURITY_POLICY + "; frame-ancestors 'none'";
 
 interface AssetRoute {
   fsRelative: string;
@@ -119,7 +116,7 @@ function setCommonHeaders(res: http.ServerResponse): void {
 
 function setIndexHtmlHeaders(res: http.ServerResponse): void {
   setCommonHeaders(res);
-  res.setHeader('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+  res.setHeader('Content-Security-Policy', CONTENT_SECURITY_POLICY_HEADER);
 }
 
 // Centralised response terminator (WI-01). HEAD responses (RFC 9110 §9.3.2)
