@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0078d4"/>
+      <stop offset="100%" stop-color="#005a9e"/>
+    </linearGradient>
+    <linearGradient id="docFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e8e8e8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded rectangle -->
+  <rect x="4" y="4" width="120" height="120" rx="20" ry="20" fill="url(#bg)"/>
+
+  <!-- Document shape -->
+  <path d="M30 24 L82 24 L98 40 L98 104 L30 104 Z" fill="url(#docFill)" stroke="#ccc" stroke-width="1"/>
+  <!-- Folded corner -->
+  <path d="M82 24 L82 40 L98 40 Z" fill="#d0d0d0" stroke="#bbb" stroke-width="0.5"/>
+
+  <!-- Markdown down-arrow "M" symbol -->
+  <!-- Left stroke of M -->
+  <path d="M42 52 L42 82" stroke="#0078d4" stroke-width="5" stroke-linecap="round" fill="none"/>
+  <!-- Left diagonal -->
+  <path d="M42 52 L56 68" stroke="#0078d4" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Right diagonal -->
+  <path d="M56 68 L70 52" stroke="#0078d4" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Right stroke of M -->
+  <path d="M70 52 L70 82" stroke="#0078d4" stroke-width="5" stroke-linecap="round" fill="none"/>
+
+  <!-- Down arrow (the ↓ part of Markdown symbol) -->
+  <path d="M82 62 L82 82" stroke="#0078d4" stroke-width="5" stroke-linecap="round" fill="none"/>
+  <path d="M76 76 L82 82 L88 76" stroke="#0078d4" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Globe icon (bottom right) -->
+  <circle cx="100" cy="100" r="18" fill="#0078d4" stroke="#005a9e" stroke-width="1"/>
+  <!-- Globe horizontal lines -->
+  <ellipse cx="100" cy="100" rx="18" ry="7" fill="none" stroke="#ffffff" stroke-width="1.2"/>
+  <line x1="82" y1="100" x2="118" y2="100" stroke="#ffffff" stroke-width="1.2"/>
+  <!-- Globe vertical ellipse -->
+  <ellipse cx="100" cy="100" rx="8" ry="18" fill="none" stroke="#ffffff" stroke-width="1.2"/>
+  <!-- Globe vertical line -->
+  <line x1="100" y1="82" x2="100" y2="118" stroke="#ffffff" stroke-width="1.2"/>
+</svg>

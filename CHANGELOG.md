@@ -4,6 +4,18 @@ All notable changes to the `open-md-in-browser` extension are documented in this
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.4.0 - 2026-04-28
+
+### Changed
+
+* Prepare extension for VS Code Marketplace publishing: add publisher, repository, and marketplace metadata fields.
+
+## 0.3.5 - 2026-04-27
+
+### Internal
+
+* Maintenance release.
+
 ## 0.3.4 - 2026-04-27
 
 ### Fixed

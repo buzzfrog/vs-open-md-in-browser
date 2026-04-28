@@ -17,3 +17,4 @@ eslint.config.*
 esbuild.js
 .vscode-test.mjs
 **/.DS_Store
+examples/**
