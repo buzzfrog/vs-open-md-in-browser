@@ -524,5 +524,21 @@ suite('PreviewServer', () => {
         noExtServer.dispose();
       }
     });
+
+    test('preview.css contains foreignObject reset rules', () => {
+      const cssPath = path.resolve(__dirname, '..', '..', 'media', 'preview.css');
+      const css = fs.readFileSync(cssPath, 'utf8');
+      assert.ok(
+        css.includes('foreignObject'),
+        'media/preview.css must contain foreignObject reset rules'
+      );
+      // Strip block comments before checking for the banned declaration so
+      // that explanatory comments mentioning "all: revert" do not trigger.
+      const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '');
+      assert.ok(
+        !stripped.includes('all: revert'),
+        'media/preview.css must not use all: revert'
+      );
+    });
   });
 });
