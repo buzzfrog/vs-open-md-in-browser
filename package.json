@@ -3,8 +3,20 @@
   "displayName": "Open Markdown in Browser",
   "description": "Render the current Markdown file as HTML and open it in your default web browser.",
   "version": "0.3.6",
-  "publisher": "your-publisher-id",
+  "publisher": "grumpy-buzzfrog",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/buzzfrog/vs-open-md-in-brower.git"
+  },
+  "homepage": "https://github.com/buzzfrog/vs-open-md-in-brower#readme",
+  "bugs": {
+    "url": "https://github.com/buzzfrog/vs-open-md-in-brower/issues"
+  },
+  "galleryBanner": {
+    "color": "#0078d4",
+    "theme": "light"
+  },
   "engines": {
     "vscode": "^1.85.0",
     "node": ">=20"
