@@ -4,7 +4,7 @@ All notable changes to the `open-md-in-browser` extension are documented in this
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## 0.3.6 - 2026-04-28
+## 0.4.0 - 2026-04-28
 
 ### Changed
 
