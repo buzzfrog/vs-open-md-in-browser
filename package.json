@@ -7,11 +7,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/buzzfrog/vs-open-md-in-brower.git"
+    "url": "https://github.com/buzzfrog/vs-open-md-in-browser.git"
   },
-  "homepage": "https://github.com/buzzfrog/vs-open-md-in-brower#readme",
+  "homepage": "https://github.com/buzzfrog/vs-open-md-in-browser#readme",
   "bugs": {
-    "url": "https://github.com/buzzfrog/vs-open-md-in-brower/issues"
+    "url": "https://github.com/buzzfrog/vs-open-md-in-browser/issues"
   },
   "icon": "images/icon.png",
   "galleryBanner": {
