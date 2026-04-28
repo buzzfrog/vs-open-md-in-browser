@@ -528,13 +528,13 @@ suite('PreviewServer', () => {
     test('preview.css contains foreignObject reset rules', () => {
       const cssPath = path.resolve(__dirname, '..', '..', 'media', 'preview.css');
       const css = fs.readFileSync(cssPath, 'utf8');
+      // Strip block comments before checking for selector and declaration
+      // tokens so explanatory comments do not satisfy the assertions.
+      const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '');
       assert.ok(
-        css.includes('foreignObject'),
+        stripped.includes('.markdown-body svg foreignObject'),
         'media/preview.css must contain foreignObject reset rules'
       );
-      // Strip block comments before checking for the banned declaration so
-      // that explanatory comments mentioning "all: revert" do not trigger.
-      const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '');
       assert.ok(
         !stripped.includes('all: revert'),
         'media/preview.css must not use all: revert'
