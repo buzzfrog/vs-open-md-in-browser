@@ -33,6 +33,15 @@ const ASSET_EXT_ALLOWLIST = new Set(Object.keys(MIME_TYPES));
 const DENY_SEGMENT_RE = /(^|[\\/])(\.[^\\/]+|\.git|node_modules)([\\/]|$)/;
 
 const TOKEN_PREFIX_RE = /^\/([0-9a-f]{32})(\/.*)?$/;
+const MERMAID_INIT_PATH = '/__open_md_in_browser__/mermaid-init.js';
+const MERMAID_INIT_JS = [
+  '(() => {',
+  '  const mermaid = globalThis.mermaid;',
+  "  if (!mermaid || typeof mermaid.initialize !== 'function') { return; }",
+  "  const prefersDark = typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;",
+  "  mermaid.initialize({ startOnLoad: true, theme: prefersDark ? 'dark' : 'default', securityLevel: 'strict' });",
+  '})();'
+].join('\n');
 
 const CSP = [
   "default-src 'none'",
@@ -165,6 +174,15 @@ export class PreviewServer implements vscode.Disposable {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'no-store');
       res.end(state.html);
+      return;
+    }
+
+    if (pathname === MERMAID_INIT_PATH) {
+      this.applySecurityHeaders(res);
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(MERMAID_INIT_JS);
       return;
     }
 

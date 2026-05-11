@@ -91,8 +91,9 @@ async function resolveTarget(uri?: vscode.Uri): Promise<vscode.Uri | undefined> 
 }
 
 const MERMAID_VERSION = '11.14.0';
-const MERMAID_URL = `https://cdn.jsdelivr.net/npm/mermaid@${MERMAID_VERSION}/dist/mermaid.esm.min.mjs`;
-const MERMAID_SRI = 'sha384-QKnqrMjp4QCSqR5R2H+rXW8780iTNp7Y3mwQOMdlAZhMePrlb/UxZJYF+Mqf+kUw';
+const MERMAID_URL = `https://cdn.jsdelivr.net/npm/mermaid@${MERMAID_VERSION}/dist/mermaid.min.js`;
+const MERMAID_SRI = 'sha384-1CMXl090wj8Dd6YfnzSQUOgWbE6suWCaenYG7pox5AX7apTpY3PmJMeS2oPql4Gk';
+const MERMAID_INIT_PATH = './__open_md_in_browser__/mermaid-init.js';
 
 function buildCspMeta(includeMermaid: boolean): string {
   const scriptSrc = includeMermaid ? "'self' https://cdn.jsdelivr.net" : "'self'";
@@ -110,12 +111,8 @@ function buildCspMeta(includeMermaid: boolean): string {
 }
 
 function buildMermaidScript(): string {
-  return `<script type="module" src="${MERMAID_URL}" integrity="${MERMAID_SRI}" crossorigin="anonymous"></script>
-<script type="module">
-  import mermaid from '${MERMAID_URL}';
-  const theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
-  mermaid.initialize({ startOnLoad: true, theme, securityLevel: 'strict' });
-</script>`;
+  return `<script src="${MERMAID_URL}" integrity="${MERMAID_SRI}" crossorigin="anonymous"></script>
+<script src="${MERMAID_INIT_PATH}"></script>`;
 }
 
 function wrapHtmlDocument(

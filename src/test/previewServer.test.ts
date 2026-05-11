@@ -230,6 +230,15 @@ suite('PreviewServer', () => {
     assertSecurityHeaders(assetRes.headers);
   });
 
+  test('internal mermaid init asset is served from self', async () => {
+    const uri = await server.publish('<p>x</p>', tmpDir);
+    const res = await httpGet(uri, '/__open_md_in_browser__/mermaid-init.js');
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.headers['content-type'], 'application/javascript; charset=utf-8');
+    assert.match(res.body.toString('utf8'), /mermaid\.initialize\(\{/);
+    assertSecurityHeaders(res.headers);
+  });
+
   // Note: the 503 "Preview not ready." branch is not publicly reachable because
   // `publish()` always sets internal state before the server begins listening.
   // See DD-01 in the planning log.
