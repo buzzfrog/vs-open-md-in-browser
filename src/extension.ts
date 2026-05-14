@@ -86,7 +86,8 @@ export function activate(context: vscode.ExtensionContext): void {
           ? data.title
           : path.basename(sourcePath);
         const title = escapeHtml(titleText);
-        const html = wrapHtmlDocument(title, bodyHtml);
+        const readingTime = estimateReadingTime(body);
+        const html = wrapHtmlDocument(title, bodyHtml, '', readingTime);
 
         const mdRenderer = (fsPath: string, rawContent: string): string => {
           const { body: linkedBody, data: linkedData } = extractFrontmatter(rawContent);
@@ -100,7 +101,8 @@ export function activate(context: vscode.ExtensionContext): void {
           const assetBase = relToRoot
             ? relToRoot.split(path.sep).join('/') + '/'
             : '';
-          return wrapHtmlDocument(linkedTitle, linkedBodyHtml, assetBase);
+          const linkedReadingTime = estimateReadingTime(linkedBody);
+          return wrapHtmlDocument(linkedTitle, linkedBodyHtml, assetBase, linkedReadingTime);
         };
 
         const localUri = await previewServer.publish(html, sourceDir, mdRenderer);
@@ -137,13 +139,16 @@ async function resolveTarget(uri?: vscode.Uri): Promise<vscode.Uri | undefined> 
   return undefined;
 }
 
-export function wrapHtmlDocument(title: string, body: string, assetBase: string = ''): string {
+export function wrapHtmlDocument(title: string, body: string, assetBase: string = '', readingTime?: number): string {
   // `assetBase` must be empty or a document-relative prefix made only of one
   // or more `../` segments so asset URLs remain aligned with the published
   // document path.
   if (assetBase && !/^(\.\.\/)+$/.test(assetBase)) {
     throw new Error(`Invalid assetBase: ${assetBase}`);
   }
+  const readingTimeHtml = readingTime
+    ? `<div class="reading-time">${readingTime} min read</div>\n`
+    : '';
   // Stylesheets and scripts use document-relative paths so they inherit the
   // per-publish path-prefix token assigned by `PreviewServer.publish` and the
   // CSP `style-src 'self' / script-src 'self'` directives are satisfied
@@ -158,8 +163,9 @@ export function wrapHtmlDocument(title: string, body: string, assetBase: string 
   <link rel="stylesheet" href="${assetBase}_assets/preview.css" />
 </head>
 <body class="markdown-body">
-${body}
+${readingTimeHtml}${body}
 <script type="module" src="${assetBase}_assets/mermaid-init.mjs"></script>
+<script type="module" src="${assetBase}_assets/document-enhancements.mjs"></script>
 </body>
 </html>`;
 }
@@ -168,6 +174,11 @@ export function escapeHtml(s: string): string {
   return s.replace(/[&<>]/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!
   );
+}
+
+export function estimateReadingTime(text: string): number {
+  const words = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+  return Math.max(1, Math.ceil(words / 200));
 }
 
 export function extractFrontmatter(source: string): { body: string; data: Record<string, unknown> } {

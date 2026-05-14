@@ -77,6 +77,10 @@ const ASSET_ROUTES: Record<string, AssetRoute> = {
     fsRelative: 'media/preview.css',
     mime: 'text/css; charset=utf-8'
   },
+  '/_assets/document-enhancements.mjs': {
+    fsRelative: 'media/document-enhancements.mjs',
+    mime: 'application/javascript; charset=utf-8'
+  },
   '/_assets/github-markdown.css': {
     fsRelative: 'node_modules/github-markdown-css/github-markdown.css',
     mime: 'text/css; charset=utf-8'

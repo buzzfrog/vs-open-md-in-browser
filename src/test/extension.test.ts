@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { extractFrontmatter, githubSlugify, renderFrontmatterTable, renderMarkdown } from '../extension';
+import { estimateReadingTime, extractFrontmatter, githubSlugify, renderFrontmatterTable, renderMarkdown, wrapHtmlDocument } from '../extension';
 
 suite('openMdInBrowser', () => {
   suiteSetup(async () => {
@@ -123,6 +123,43 @@ suite('heading ID generation', () => {
   test('inline code in headings is included in slug text', () => {
     const html = renderMarkdown('## The `render` function\n');
     assert.match(html, /<h2 id="the-render-function">/);
+  });
+});
+
+suite('estimateReadingTime', () => {
+  test('returns 1 for very short text', () => {
+    assert.strictEqual(estimateReadingTime('hello world'), 1);
+  });
+
+  test('calculates minutes at 200 wpm', () => {
+    const words = Array(400).fill('word').join(' ');
+    assert.strictEqual(estimateReadingTime(words), 2);
+  });
+
+  test('rounds up partial minutes', () => {
+    const words = Array(201).fill('word').join(' ');
+    assert.strictEqual(estimateReadingTime(words), 2);
+  });
+
+  test('handles empty string', () => {
+    assert.strictEqual(estimateReadingTime(''), 1);
+  });
+});
+
+suite('wrapHtmlDocument enhancements', () => {
+  test('includes reading time div when readingTime provided', () => {
+    const html = wrapHtmlDocument('Test', '<p>Hello</p>', '', 3);
+    assert.ok(html.includes('<div class="reading-time">3 min read</div>'));
+  });
+
+  test('omits reading time div when not provided', () => {
+    const html = wrapHtmlDocument('Test', '<p>Hello</p>');
+    assert.ok(!html.includes('reading-time'));
+  });
+
+  test('includes document-enhancements.mjs script tag', () => {
+    const html = wrapHtmlDocument('Test', '<p>Hello</p>');
+    assert.ok(html.includes('_assets/document-enhancements.mjs'));
   });
 });
 
