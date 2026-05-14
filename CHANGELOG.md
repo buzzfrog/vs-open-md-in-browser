@@ -4,6 +4,19 @@ All notable changes to the `open-md-in-browser` extension are documented in this
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.0 - 2026-05-14
+
+### Added
+
+* Clicking a relative link to another `.md` file in the preview now renders the target as full HTML with styles, Mermaid diagrams, and frontmatter — instead of serving raw Markdown.
+* Fragment links on `.md` references (e.g. `./other.md#section`) render the target and scroll to the anchor.
+* Heading IDs are generated using the GitHub-compatible slug algorithm (lowercase, hyphens, Unicode preserved, duplicate suffixes) so `#anchor` links scroll to the correct heading.
+* Example files `internal-links-test.md` and `linked-doc-test.md` for testing cross-file navigation.
+
+### Fixed
+
+* Path containment checks are now case-insensitive on Windows, fixing "Forbidden" errors when `fs.realpath` callback and promise APIs return different drive-letter casing.
+
 ## 0.4.0 - 2026-04-28
 
 ### Changed
