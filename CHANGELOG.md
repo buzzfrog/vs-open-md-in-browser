@@ -4,6 +4,20 @@ All notable changes to the `open-md-in-browser` extension are documented in this
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.2 - 2026-05-14
+
+### Added
+
+* TOC sidebar with scroll spy for documents with 4+ headings (visible at ≥1400 px).
+* Collapsible sections that wrap h2 content in `<details>`/`<summary>` with Collapse/Expand All controls.
+* Heading quick-jump modal (Ctrl+K) with filtered search, arrow-key navigation, and level badges.
+* Reading-time estimate and progress bar with back-to-top button.
+* `aria-activedescendant` support in heading-search input for screen readers.
+
+### Fixed
+
+* Heading-search combobox now exposes proper ARIA roles (`combobox`, `listbox`, `option`) for assistive technology.
+
 ## 0.5.0 - 2026-05-14
 
 ### Added
