@@ -4,7 +4,7 @@ All notable changes to the `open-md-in-browser` extension are documented in this
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## 0.5.2 - 2026-05-14
+## 0.6.0 - 2026-05-14
 
 ### Added
 
@@ -17,7 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 * Heading-search combobox now exposes proper ARIA roles (`combobox`, `listbox`, `option`) for assistive technology.
-* Table-of-contents fly-out now renders to the left of the article instead of overlaying it. Restores the centered 980 px column by overriding the vendor `.markdown-body { margin: 0 }` rule with `body.markdown-body { margin: 0 auto }`. The 1543 px visibility breakpoint shipped earlier in 0.5.2 is preserved.
+* Table-of-contents fly-out now renders to the left of the article instead of overlaying it. Restores the centered 980 px column by overriding the vendor `.markdown-body { margin: 0 }` rule with `body.markdown-body { margin: 0 auto }`. The 1543 px visibility breakpoint introduced alongside the TOC sidebar is preserved.
 
 ## 0.5.0 - 2026-05-14
 
