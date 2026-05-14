@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { estimateReadingTime, extractFrontmatter, githubSlugify, renderFrontmatterTable, renderMarkdown, wrapHtmlDocument } from '../extension';
+import { estimateReadingTime, extractFrontmatter, extractToc, githubSlugify, renderFrontmatterTable, renderMarkdown, wrapHtmlDocument } from '../extension';
 
 suite('openMdInBrowser', () => {
   suiteSetup(async () => {
@@ -160,6 +160,75 @@ suite('wrapHtmlDocument enhancements', () => {
   test('includes document-enhancements.mjs script tag', () => {
     const html = wrapHtmlDocument('Test', '<p>Hello</p>');
     assert.ok(html.includes('_assets/document-enhancements.mjs'));
+  });
+});
+
+suite('extractToc', () => {
+  test('returns empty string for fewer than 4 headings', () => {
+    assert.strictEqual(extractToc('# One\n## Two\n## Three'), '');
+  });
+
+  test('generates TOC for 4+ headings', () => {
+    const body = '## A\n## B\n## C\n## D';
+    const toc = extractToc(body);
+    assert.ok(toc.includes('<nav class="toc-sidebar"'));
+    assert.ok(toc.includes('href="#a"'));
+    assert.ok(toc.includes('href="#d"'));
+  });
+
+  test('handles duplicate headings with suffix', () => {
+    const body = '## Foo\n## Foo\n## Foo\n## Bar';
+    const toc = extractToc(body);
+    assert.ok(toc.includes('href="#foo"'));
+    assert.ok(toc.includes('href="#foo-1"'));
+    assert.ok(toc.includes('href="#foo-2"'));
+  });
+
+  test('escapes HTML in heading text', () => {
+    const body = '## <script>\n## Normal\n## Also\n## More';
+    const toc = extractToc(body);
+    assert.ok(toc.includes('&lt;script&gt;'));
+    assert.ok(!toc.includes('<script>'));
+  });
+
+  test('excludes h5 and h6 headings', () => {
+    const body = '## A\n## B\n## C\n##### Deep\n###### Deeper\n## D';
+    const toc = extractToc(body);
+    assert.ok(!toc.includes('deep'));
+    assert.ok(!toc.includes('deeper'));
+  });
+
+  test('includes toc-level classes for indentation', () => {
+    const body = '# Title\n## Sub\n### Deep\n#### Deeper';
+    const toc = extractToc(body);
+    assert.ok(toc.includes('toc-level-1'));
+    assert.ok(toc.includes('toc-level-2'));
+    assert.ok(toc.includes('toc-level-3'));
+    assert.ok(toc.includes('toc-level-4'));
+  });
+});
+
+suite('collapsible sections integration', () => {
+  test('includes collapsible-sections.mjs script tag', () => {
+    const html = wrapHtmlDocument('Test', '<p>Hello</p>');
+    assert.ok(html.includes('_assets/collapsible-sections.mjs'));
+  });
+
+  test('uses correct assetBase for collapsible-sections.mjs', () => {
+    const html = wrapHtmlDocument('Test', '<p>Hello</p>', '../');
+    assert.ok(html.includes('../_assets/collapsible-sections.mjs'));
+  });
+});
+
+suite('heading search integration', () => {
+  test('includes heading-search.mjs script tag', () => {
+    const html = wrapHtmlDocument('Test', '<p>Hello</p>');
+    assert.ok(html.includes('_assets/heading-search.mjs'));
+  });
+
+  test('uses correct assetBase for heading-search.mjs', () => {
+    const html = wrapHtmlDocument('Test', '<p>Hello</p>', '../');
+    assert.ok(html.includes('../_assets/heading-search.mjs'));
   });
 });
 
