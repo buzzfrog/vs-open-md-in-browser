@@ -5,7 +5,11 @@
  * still permitted via style-src-attr 'unsafe-inline' on the document.
  */
 
-body {
+/* Use `body.markdown-body` (specificity 0,1,1) so this beats
+   github-markdown-css `.markdown-body { margin: 0 }` (0,1,0). Without the
+   `.markdown-body` qualifier the centered 980px column is pinned to left:0
+   and the fixed-position TOC sidebar paints on top of the article. */
+body.markdown-body {
   box-sizing: border-box;
   max-width: 980px;
   margin: 0 auto;
