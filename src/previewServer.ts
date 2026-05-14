@@ -6,6 +6,17 @@ import * as vscode from 'vscode';
 
 const IDLE_SHUTDOWN_MS = 5 * 60 * 1000;
 
+// On Windows, `fs.realpath` (callback) and `fs.promises.realpath` may return
+// different drive-letter casing, so path containment checks must be
+// case-insensitive on case-insensitive filesystems.
+const IS_WIN = process.platform === 'win32';
+function pathEqual(a: string, b: string): boolean {
+  return IS_WIN ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+function pathStartsWith(child: string, parent: string): boolean {
+  return IS_WIN ? child.toLowerCase().startsWith(parent.toLowerCase()) : child.startsWith(parent);
+}
+
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.htm': 'text/html; charset=utf-8',
@@ -350,7 +361,7 @@ export class PreviewServer implements vscode.Disposable {
     // guard against symlink escapes; the lexical check fails closed cheaply
     // before any filesystem I/O for the common `..` traversal case and limits
     // the attack surface for any future bug in `fs.realpath` callback paths.
-    if (resolved !== state.rootDir && !resolved.startsWith(rootWithSep)) {
+    if (!pathEqual(resolved, state.rootDir) && !pathStartsWith(resolved, rootWithSep)) {
       res.statusCode = 403;
       setCommonHeaders(res);
       endResponse(res, method, 'Forbidden.');
@@ -374,7 +385,7 @@ export class PreviewServer implements vscode.Disposable {
 
       const realRoot = state.realRootDir;
       const realRootWithSep = realRoot.endsWith(path.sep) ? realRoot : realRoot + path.sep;
-      if (realResolved !== realRoot && !realResolved.startsWith(realRootWithSep)) {
+      if (!pathEqual(realResolved, realRoot) && !pathStartsWith(realResolved, realRootWithSep)) {
         res.statusCode = 403;
         setCommonHeaders(res);
         endResponse(res, method, 'Forbidden.');
@@ -496,7 +507,7 @@ export class PreviewServer implements vscode.Disposable {
           return;
         }
         const realExtWithSep = realExtPath.endsWith(path.sep) ? realExtPath : realExtPath + path.sep;
-        if (realCandidate !== realExtPath && !realCandidate.startsWith(realExtWithSep)) {
+        if (!pathEqual(realCandidate, realExtPath) && !pathStartsWith(realCandidate, realExtWithSep)) {
           res.statusCode = 403;
           setCommonHeaders(res);
           endResponse(res, method, 'Forbidden.');

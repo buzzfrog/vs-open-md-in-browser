@@ -228,6 +228,22 @@ suite('PreviewServer', () => {
     assert.strictEqual(res.statusCode, 403);
   });
 
+  test('publish with swapped drive-letter case still serves workspace files', async function () {
+    if (process.platform !== 'win32') {
+      this.skip();
+      return;
+    }
+    // Simulate the VS-Code scenario where `uri.fsPath` has a lowercase drive
+    // letter but `fs.realpath` returns uppercase. Swap the first letter's case
+    // so the rootDir casing differs from what `fs.realpath` will resolve.
+    const first = tmpDir[0];
+    const swapped = first === first.toUpperCase() ? first.toLowerCase() : first.toUpperCase();
+    const altCaseDir = swapped + tmpDir.slice(1);
+    const uri = await server.publish('<p>root</p>', altCaseDir);
+    const res = await httpGet(uri, '/asset.png');
+    assert.strictEqual(res.statusCode, 200, 'workspace file should be served despite drive-letter case mismatch');
+  });
+
   test('localhost Host header is accepted', async () => {
     const uri = await server.publish('<p>x</p>', tmpDir);
     const [, portStr] = uri.authority.split(':');
