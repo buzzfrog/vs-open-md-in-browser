@@ -215,7 +215,7 @@ body.markdown-body {
 .toc-sidebar {
   position: fixed;
   top: 32px;
-  left: max(0px, calc(50% - 490px - 250px - 32px));
+  left: calc(50% - 490px - 250px - 32px);
   width: 220px;
   max-height: calc(100vh - 64px);
   overflow-y: auto;
@@ -262,8 +262,10 @@ body.markdown-body {
   font-weight: 600;
 }
 
-/* Hide TOC on narrow viewports where it would overlap content */
-@media (max-width: 1400px) {
+/* Hide TOC on viewports where it cannot sit fully outside the 980px column.
+   Math: 50% >= 490 (half body) + 220 (toc width) + 12 (toc padding-right)
+              + 32 (gap)  ->  viewport >= 1544px. */
+@media (max-width: 1543px) {
   .toc-sidebar {
     display: none;
   }

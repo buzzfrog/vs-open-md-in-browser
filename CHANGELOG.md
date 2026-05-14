@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 * Heading-search combobox now exposes proper ARIA roles (`combobox`, `listbox`, `option`) for assistive technology.
+* Table-of-contents fly-out no longer overlaps the article on viewports between 1401 px and 1543 px; the TOC is now shown only when there is room for it beside the 980 px article column.
 
 ## 0.5.0 - 2026-05-14
 
