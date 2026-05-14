@@ -138,8 +138,11 @@ async function resolveTarget(uri?: vscode.Uri): Promise<vscode.Uri | undefined> 
 }
 
 export function wrapHtmlDocument(title: string, body: string, assetBase: string = ''): string {
+  // `assetBase` must be empty or a document-relative prefix made only of one
+  // or more `../` segments so asset URLs remain aligned with the published
+  // document path.
   if (assetBase && !/^(\.\.\/)+$/.test(assetBase)) {
-    assetBase = '';
+    throw new Error(`Invalid assetBase: ${assetBase}`);
   }
   // Stylesheets and scripts use document-relative paths so they inherit the
   // per-publish path-prefix token assigned by `PreviewServer.publish` and the
