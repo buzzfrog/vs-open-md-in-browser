@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-* TOC sidebar with scroll spy for documents with 4+ headings (visible at ≥1400 px).
+* TOC sidebar with scroll spy for documents with 4+ headings (visible at ≥1544 px).
 * Collapsible sections that wrap h2 content in `<details>`/`<summary>` with Collapse/Expand All controls.
 * Heading quick-jump modal (Ctrl+K) with filtered search, arrow-key navigation, and level badges.
 * Reading-time estimate and progress bar with back-to-top button.

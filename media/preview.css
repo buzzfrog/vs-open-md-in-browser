@@ -263,7 +263,7 @@ body.markdown-body {
 }
 
 /* Hide TOC on viewports where it cannot sit fully outside the 980px column.
-   Math: 50% >= 490 (half body) + 220 (toc width) + 12 (toc padding-right)
+   Math: 50% >= 490 (half body) + 250 (toc width 220 + padding-right 12 + 18 buffer)
               + 32 (gap)  ->  viewport >= 1544px. */
 @media (max-width: 1543px) {
   .toc-sidebar {
