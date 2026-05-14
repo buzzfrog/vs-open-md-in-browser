@@ -3,6 +3,8 @@ const bar = document.createElement('div');
 bar.className = 'progress-bar';
 bar.setAttribute('role', 'progressbar');
 bar.setAttribute('aria-label', 'Reading progress');
+bar.setAttribute('aria-valuemin', '0');
+bar.setAttribute('aria-valuemax', '100');
 document.body.prepend(bar);
 
 function updateProgress() {
