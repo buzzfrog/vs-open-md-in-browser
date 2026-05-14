@@ -15,9 +15,13 @@ if (headings.length < 2) {
   input.className = 'heading-search-input';
   input.placeholder = 'Jump to heading...';
   input.setAttribute('aria-label', 'Search headings');
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-expanded', 'true');
+  input.setAttribute('aria-controls', 'heading-search-listbox');
 
   const list = document.createElement('ul');
   list.className = 'heading-search-results';
+  list.id = 'heading-search-listbox';
   list.setAttribute('role', 'listbox');
 
   container.append(input, list);
@@ -38,6 +42,7 @@ if (headings.length < 2) {
     matches.forEach((h, idx) => {
       const li = document.createElement('li');
       li.setAttribute('role', 'option');
+      li.id = `heading-search-option-${idx}`;
       li.className = 'heading-search-item';
       const tag = h.tagName.toLowerCase();
       const level = document.createElement('span');
@@ -54,6 +59,9 @@ if (headings.length < 2) {
     if (matches.length > 0) {
       activeIndex = 0;
       list.children[0].classList.add('selected');
+      input.setAttribute('aria-activedescendant', 'heading-search-option-0');
+    } else {
+      input.removeAttribute('aria-activedescendant');
     }
   }
 
@@ -83,6 +91,7 @@ if (headings.length < 2) {
     activeIndex = Math.max(0, Math.min(newIndex, items.length - 1));
     items[activeIndex].classList.add('selected');
     items[activeIndex].scrollIntoView({ block: 'nearest' });
+    input.setAttribute('aria-activedescendant', items[activeIndex].id);
   }
 
   input.addEventListener('input', () => buildItems(input.value));

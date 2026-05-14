@@ -507,6 +507,11 @@ suite('PreviewServer', () => {
         'body { padding: 1px; }\n',
         'utf8'
       );
+      fs.writeFileSync(
+        path.join(extDir, 'media', 'heading-search.mjs'),
+        'const headings = []; // heading-search stub\n',
+        'utf8'
+      );
       const ghDir = path.join(extDir, 'node_modules', 'github-markdown-css');
       fs.mkdirSync(ghDir, { recursive: true });
       fs.writeFileSync(
@@ -576,6 +581,14 @@ suite('PreviewServer', () => {
       assert.strictEqual(res.statusCode, 200);
       assert.strictEqual(res.headers['content-type'], 'text/css; charset=utf-8');
       assert.ok(res.body.toString('utf8').includes('markdown-body'), 'body should contain markdown-body class');
+    });
+
+    test('GET /_assets/heading-search.mjs returns 200 with javascript content-type', async () => {
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      const res = await httpGet(uri, '/_assets/heading-search.mjs');
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'application/javascript; charset=utf-8');
+      assert.ok(res.body.toString('utf8').includes('heading-search'), 'body should contain heading-search');
     });
 
     test('GET /_assets/something-else returns 404 (allow-list only)', async () => {

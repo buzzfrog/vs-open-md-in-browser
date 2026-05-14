@@ -161,6 +161,17 @@ suite('wrapHtmlDocument enhancements', () => {
     const html = wrapHtmlDocument('Test', '<p>Hello</p>');
     assert.ok(html.includes('_assets/document-enhancements.mjs'));
   });
+
+  test('includes TOC sidebar when tocHtml provided', () => {
+    const body = '## A\n## B\n## C\n## D';
+    const toc = extractToc(body);
+    assert.ok(toc.length > 0, 'extractToc should produce HTML for 4+ headings');
+    const html = wrapHtmlDocument('Test', '<p>Content</p>', '', 2, toc);
+    assert.ok(html.includes('<nav class="toc-sidebar"'), 'TOC nav should appear in final document');
+    assert.ok(html.includes('href="#a"'), 'TOC link for heading A should be present');
+    assert.ok(html.includes('<div class="reading-time">2 min read</div>'), 'reading time should coexist with TOC');
+    assert.ok(html.includes('<p>Content</p>'), 'body content should be present');
+  });
 });
 
 suite('extractToc', () => {
