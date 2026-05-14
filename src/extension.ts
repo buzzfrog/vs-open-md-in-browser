@@ -12,6 +12,8 @@ const md = new MarkdownIt({
   breaks: false
 });
 
+addHeadingIds(md);
+
 const defaultFence = md.renderer.rules.fence!;
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
@@ -28,6 +30,37 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
 
 export function renderMarkdown(body: string): string {
   return md.render(body);
+}
+
+export function githubSlugify(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\u0080-\uFFFF-]/g, '');
+}
+
+function addHeadingIds(md: MarkdownIt): void {
+  md.core.ruler.push('heading_ids', (state) => {
+    const slugCounts: Record<string, number> = {};
+    for (let idx = 0; idx < state.tokens.length; idx++) {
+      const token = state.tokens[idx];
+      if (token.type !== 'heading_open') { continue; }
+      const inlineToken = state.tokens[idx + 1];
+      const text = inlineToken?.children
+        ?.filter(t => t.type === 'text' || t.type === 'code_inline')
+        .map(t => t.content)
+        .join('') ?? '';
+      let slug = githubSlugify(text);
+      if (slug in slugCounts) {
+        slugCounts[slug]++;
+        slug = `${slug}-${slugCounts[slug]}`;
+      } else {
+        slugCounts[slug] = 0;
+      }
+      token.attrSet('id', slug);
+    }
+  });
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -55,7 +88,22 @@ export function activate(context: vscode.ExtensionContext): void {
         const title = escapeHtml(titleText);
         const html = wrapHtmlDocument(title, bodyHtml);
 
-        const localUri = await previewServer.publish(html, sourceDir);
+        const mdRenderer = (fsPath: string, rawContent: string): string => {
+          const { body: linkedBody, data: linkedData } = extractFrontmatter(rawContent);
+          const linkedBodyHtml = renderFrontmatterTable(linkedData) + md.render(linkedBody);
+          const linkedTitleText = typeof linkedData.title === 'string' && linkedData.title.trim()
+            ? linkedData.title
+            : path.basename(fsPath);
+          const linkedTitle = escapeHtml(linkedTitleText);
+          const fileDir = path.dirname(fsPath);
+          const relToRoot = path.relative(fileDir, sourceDir);
+          const assetBase = relToRoot
+            ? relToRoot.split(path.sep).join('/') + '/'
+            : '';
+          return wrapHtmlDocument(linkedTitle, linkedBodyHtml, assetBase);
+        };
+
+        const localUri = await previewServer.publish(html, sourceDir, mdRenderer);
         const externalUri = await vscode.env.asExternalUri(localUri);
         previewServer.addAllowedHost(externalUri.authority);
         const ok = await vscode.env.openExternal(externalUri);
@@ -89,7 +137,10 @@ async function resolveTarget(uri?: vscode.Uri): Promise<vscode.Uri | undefined> 
   return undefined;
 }
 
-function wrapHtmlDocument(title: string, body: string): string {
+export function wrapHtmlDocument(title: string, body: string, assetBase: string = ''): string {
+  if (assetBase && !/^(\.\.\/)+$/.test(assetBase)) {
+    assetBase = '';
+  }
   // Stylesheets and scripts use document-relative paths so they inherit the
   // per-publish path-prefix token assigned by `PreviewServer.publish` and the
   // CSP `style-src 'self' / script-src 'self'` directives are satisfied
@@ -100,17 +151,17 @@ function wrapHtmlDocument(title: string, body: string): string {
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="${CONTENT_SECURITY_POLICY}" />
   <title>${title}</title>
-  <link rel="stylesheet" href="_assets/github-markdown.css" />
-  <link rel="stylesheet" href="_assets/preview.css" />
+  <link rel="stylesheet" href="${assetBase}_assets/github-markdown.css" />
+  <link rel="stylesheet" href="${assetBase}_assets/preview.css" />
 </head>
 <body class="markdown-body">
 ${body}
-<script type="module" src="_assets/mermaid-init.mjs"></script>
+<script type="module" src="${assetBase}_assets/mermaid-init.mjs"></script>
 </body>
 </html>`;
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s.replace(/[&<>]/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!
   );

@@ -96,11 +96,14 @@ const ASSET_PREFIX_ROUTES: Record<string, AssetPrefixRoute> = {
   }
 };
 
+export type MdRenderFn = (fsPath: string, content: string) => string;
+
 interface PublishedState {
   html: string;
   rootDir: string;
   realRootDir: string;
   token: string;
+  mdRenderer?: MdRenderFn;
 }
 
 export interface PreviewServerOptions {
@@ -173,7 +176,7 @@ export class PreviewServer implements vscode.Disposable {
     this.extensionPath = options.extensionPath;
   }
 
-  async publish(html: string, rootDir: string): Promise<vscode.Uri> {
+  async publish(html: string, rootDir: string, mdRenderer?: MdRenderFn): Promise<vscode.Uri> {
     const resolvedRoot = path.resolve(rootDir);
     const realRoot = await fs.promises.realpath(resolvedRoot);
     // Per-publish path-prefix token (WI-05). Defense-in-depth against
@@ -182,7 +185,7 @@ export class PreviewServer implements vscode.Disposable {
     // 128 bits of entropy, hex-encoded so it is URL-safe and survives all
     // path-segment escaping rules.
     const token = crypto.randomBytes(16).toString('hex');
-    this.state = { html, rootDir: resolvedRoot, realRootDir: realRoot, token };
+    this.state = { html, rootDir: resolvedRoot, realRootDir: realRoot, token, mdRenderer };
     await this.ensureStarted();
     this.rearmIdleTimer();
     const cacheBuster = Date.now().toString(36);
@@ -386,6 +389,30 @@ export class PreviewServer implements vscode.Disposable {
           return;
         }
         const ext = path.extname(realResolved).toLowerCase();
+        if ((ext === '.md' || ext === '.markdown') && state.mdRenderer) {
+          fs.readFile(realResolved, 'utf8', (readErr, content) => {
+            if (readErr) {
+              res.statusCode = 500;
+              setCommonHeaders(res);
+              endResponse(res, method, 'Server error.');
+              return;
+            }
+            let renderedHtml: string;
+            try {
+              renderedHtml = state.mdRenderer!(realResolved, content);
+            } catch {
+              res.statusCode = 500;
+              setCommonHeaders(res);
+              endResponse(res, method, 'Server error.');
+              return;
+            }
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            setIndexHtmlHeaders(res);
+            endResponse(res, method, renderedHtml);
+          });
+          return;
+        }
         const mime = MIME_TYPES[ext] ?? 'application/octet-stream';
         res.statusCode = 200;
         res.setHeader('Content-Type', mime);
