@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { extractFrontmatter, renderFrontmatterTable, renderMarkdown } from '../extension';
+import { extractFrontmatter, githubSlugify, renderFrontmatterTable, renderMarkdown } from '../extension';
 
 suite('openMdInBrowser', () => {
   suiteSetup(async () => {
@@ -83,6 +83,46 @@ suite('mermaid fence rendering', () => {
   test('escapes ampersands in diagram source', () => {
     const html = renderMarkdown('```mermaid\nA & B\n```\n');
     assert.match(html, /A &amp; B/);
+  });
+});
+
+suite('heading ID generation', () => {
+  test('h2 heading gets GitHub-compatible id', () => {
+    const html = renderMarkdown('## Hello World\n');
+    assert.match(html, /<h2 id="hello-world">/);
+  });
+
+  test('all heading levels receive id attributes', () => {
+    const md = '# H1\n## H2\n### H3\n#### H4\n##### H5\n###### H6\n';
+    const html = renderMarkdown(md);
+    assert.match(html, /<h1 id="h1">/);
+    assert.match(html, /<h2 id="h2">/);
+    assert.match(html, /<h3 id="h3">/);
+    assert.match(html, /<h4 id="h4">/);
+    assert.match(html, /<h5 id="h5">/);
+    assert.match(html, /<h6 id="h6">/);
+  });
+
+  test('duplicate headings get numeric suffixes', () => {
+    const html = renderMarkdown('## Dupe\n## Dupe\n## Dupe\n');
+    assert.match(html, /<h2 id="dupe">/);
+    assert.match(html, /<h2 id="dupe-1">/);
+    assert.match(html, /<h2 id="dupe-2">/);
+  });
+
+  test('punctuation is stripped from slugs', () => {
+    const slug = githubSlugify('Hello, World! (2026)');
+    assert.strictEqual(slug, 'hello-world-2026');
+  });
+
+  test('unicode characters are preserved in slugs', () => {
+    const slug = githubSlugify('Ünïcödé Heading');
+    assert.strictEqual(slug, 'ünïcödé-heading');
+  });
+
+  test('inline code in headings is included in slug text', () => {
+    const html = renderMarkdown('## The `render` function\n');
+    assert.match(html, /<h2 id="the-render-function">/);
   });
 });
 

@@ -4,7 +4,7 @@ import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { PreviewServer } from '../previewServer';
+import { PreviewServer, MdRenderFn } from '../previewServer';
 
 interface HttpResult {
   statusCode: number;
@@ -90,6 +90,9 @@ suite('PreviewServer', () => {
     fs.writeFileSync(path.join(tmpDir, 'asset.png'), PNG_SIGNATURE);
     fs.mkdirSync(path.join(tmpDir, 'nested'));
     fs.writeFileSync(path.join(tmpDir, 'nested', 'asset.css'), CSS_CONTENT, 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'other.md'), '# Other\n\nContent here.\n', 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'nested', 'doc.md'), '# Nested Doc\n', 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'doc.markdown'), '# Markdown Extension\n', 'utf8');
   });
 
   suiteTeardown(() => {
@@ -223,6 +226,22 @@ suite('PreviewServer', () => {
     const uri = await server.publish('<p>x</p>', tmpDir);
     const res = await httpRequest(uri, { headers: { Host: 'attacker.example' } });
     assert.strictEqual(res.statusCode, 403);
+  });
+
+  test('publish with swapped drive-letter case still serves workspace files', async function () {
+    if (process.platform !== 'win32') {
+      this.skip();
+      return;
+    }
+    // Simulate the VS-Code scenario where `uri.fsPath` has a lowercase drive
+    // letter but `fs.realpath` returns uppercase. Swap the first letter's case
+    // so the rootDir casing differs from what `fs.realpath` will resolve.
+    const first = tmpDir[0];
+    const swapped = first === first.toUpperCase() ? first.toLowerCase() : first.toUpperCase();
+    const altCaseDir = swapped + tmpDir.slice(1);
+    const uri = await server.publish('<p>root</p>', altCaseDir);
+    const res = await httpGet(uri, '/asset.png');
+    assert.strictEqual(res.statusCode, 200, 'workspace file should be served despite drive-letter case mismatch');
   });
 
   test('localhost Host header is accepted', async () => {
@@ -377,6 +396,94 @@ suite('PreviewServer', () => {
     const csp = String(res.headers['content-security-policy'] ?? '');
     assert.match(csp, /style-src 'self' 'unsafe-inline'/, 'style-src should include unsafe-inline for Mermaid');
     assert.match(csp, /frame-ancestors 'none'/, 'HTTP header CSP should include frame-ancestors');
+  });
+
+  suite('markdown rendering', () => {
+    test('GET /other.md with mdRenderer returns 200, text/html, rendered content', async () => {
+      const renderer: MdRenderFn = (_p, c) => `<html>${c}</html>`;
+      const uri = await server.publish('<p>root</p>', tmpDir, renderer);
+      const res = await httpGet(uri, '/other.md');
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'text/html; charset=utf-8');
+      assert.ok(res.body.toString('utf8').includes('Other'));
+    });
+
+    test('rendered .md response includes CSP header', async () => {
+      const renderer: MdRenderFn = (_p, c) => `<html>${c}</html>`;
+      const uri = await server.publish('<p>root</p>', tmpDir, renderer);
+      const res = await httpGet(uri, '/other.md');
+      const csp = String(res.headers['content-security-policy'] ?? '');
+      assert.match(csp, /script-src 'self'/);
+      assert.match(csp, /frame-ancestors 'none'/);
+    });
+
+    test('rendered .md response includes X-Content-Type-Options: nosniff', async () => {
+      const renderer: MdRenderFn = (_p, c) => `<html>${c}</html>`;
+      const uri = await server.publish('<p>root</p>', tmpDir, renderer);
+      const res = await httpGet(uri, '/other.md');
+      assert.strictEqual(res.headers['x-content-type-options'], 'nosniff');
+    });
+
+    test('nested .md file renders correctly', async () => {
+      const renderer: MdRenderFn = (_p, c) => `<html>${c}</html>`;
+      const uri = await server.publish('<p>root</p>', tmpDir, renderer);
+      const res = await httpGet(uri, '/nested/doc.md');
+      assert.strictEqual(res.statusCode, 200);
+      assert.ok(res.body.toString('utf8').includes('Nested Doc'));
+    });
+
+    test('.md without mdRenderer returns raw text/markdown', async () => {
+      const uri = await server.publish('<p>root</p>', tmpDir);
+      const res = await httpGet(uri, '/other.md');
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'text/markdown; charset=utf-8');
+    });
+
+    test('nonexistent .md returns 404', async () => {
+      const renderer: MdRenderFn = (_p, c) => `<html>${c}</html>`;
+      const uri = await server.publish('<p>root</p>', tmpDir, renderer);
+      const res = await httpGet(uri, '/missing.md');
+      assert.strictEqual(res.statusCode, 404);
+    });
+
+    test('traversal to .md outside rootDir returns 403', async () => {
+      const renderer: MdRenderFn = (_p, c) => `<html>${c}</html>`;
+      const uri = await server.publish('<p>root</p>', tmpDir, renderer);
+      const res = await httpGet(uri, '/../../etc/passwd.md');
+      assert.strictEqual(res.statusCode, 403);
+    });
+
+    test('HEAD on .md returns 200, text/html, empty body', async () => {
+      const renderer: MdRenderFn = (_p, c) => `<html>${c}</html>`;
+      const uri = await server.publish('<p>root</p>', tmpDir, renderer);
+      const res = await httpRequest(uri, { method: 'HEAD', path: '/other.md' });
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'text/html; charset=utf-8');
+      assert.strictEqual(res.body.length, 0);
+    });
+
+    test('non-.md files still served raw when mdRenderer is provided', async () => {
+      const renderer: MdRenderFn = (_p, c) => `<html>${c}</html>`;
+      const uri = await server.publish('<p>root</p>', tmpDir, renderer);
+      const res = await httpGet(uri, '/asset.png');
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'image/png');
+    });
+
+    test('renderer error returns 500', async () => {
+      const badRenderer: MdRenderFn = () => { throw new Error('render failed'); };
+      const uri = await server.publish('<p>root</p>', tmpDir, badRenderer);
+      const res = await httpGet(uri, '/other.md');
+      assert.strictEqual(res.statusCode, 500);
+    });
+
+    test('.markdown extension is rendered as HTML when mdRenderer is provided', async () => {
+      const renderer: MdRenderFn = (_p, c) => `<html>${c}</html>`;
+      const uri = await server.publish('<p>root</p>', tmpDir, renderer);
+      const res = await httpGet(uri, '/doc.markdown');
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'text/html; charset=utf-8');
+    });
   });
 
   suite('asset routes', () => {
