@@ -512,6 +512,16 @@ suite('PreviewServer', () => {
         'const headings = []; // heading-search stub\n',
         'utf8'
       );
+      fs.writeFileSync(
+        path.join(extDir, 'media', 'scroll-spy.mjs'),
+        '// scroll-spy stub\n',
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(extDir, 'media', 'collapsible-sections.mjs'),
+        '// collapsible-sections stub\n',
+        'utf8'
+      );
       const ghDir = path.join(extDir, 'node_modules', 'github-markdown-css');
       fs.mkdirSync(ghDir, { recursive: true });
       fs.writeFileSync(

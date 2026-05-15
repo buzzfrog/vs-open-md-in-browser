@@ -213,7 +213,7 @@ suite('extractToc', () => {
   test('slug counter accounts for skipped h5/h6 headings with duplicate text', () => {
     // addHeadingIds assigns: h2 Foo -> "foo", h5 Foo -> "foo-1", h2 Foo -> "foo-2"
     // extractToc must produce the same slugs for the two h2 headings
-    const body = '## Foo\n##### Foo\n## Foo\n## Bar';
+    const body = '## Foo\n##### Foo\n## Foo\n## Bar\n## Baz';
     const toc = extractToc(body);
     assert.ok(toc.includes('href="#foo"'), 'first h2 Foo should be #foo');
     assert.ok(toc.includes('href="#foo-2"'), 'second h2 Foo should be #foo-2 (h5 consumed #foo-1)');
