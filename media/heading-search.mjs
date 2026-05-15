@@ -68,6 +68,9 @@ if (headings.length < 2) {
   function jumpTo(heading) {
     close();
     heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!heading.hasAttribute('tabindex')) {
+      heading.setAttribute('tabindex', '-1');
+    }
     heading.focus();
   }
 
