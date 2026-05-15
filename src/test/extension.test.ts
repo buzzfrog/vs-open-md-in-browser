@@ -209,6 +209,16 @@ suite('extractToc', () => {
     assert.ok(!toc.includes('deeper'));
   });
 
+  test('slug counter accounts for skipped h5/h6 headings with duplicate text', () => {
+    // addHeadingIds assigns: h2 Foo -> "foo", h5 Foo -> "foo-1", h2 Foo -> "foo-2"
+    // extractToc must produce the same slugs for the two h2 headings
+    const body = '## Foo\n##### Foo\n## Foo\n## Bar';
+    const toc = extractToc(body);
+    assert.ok(toc.includes('href="#foo"'), 'first h2 Foo should be #foo');
+    assert.ok(toc.includes('href="#foo-2"'), 'second h2 Foo should be #foo-2 (h5 consumed #foo-1)');
+    assert.ok(!toc.includes('href="#foo-1"'), '#foo-1 belongs to the h5 and must not appear in TOC');
+  });
+
   test('includes toc-level classes for indentation', () => {
     const body = '# Title\n## Sub\n### Deep\n#### Deeper';
     const toc = extractToc(body);

@@ -189,7 +189,6 @@ export function extractToc(body: string): string {
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i].type !== 'heading_open') { continue; }
     const level = parseInt(tokens[i].tag.slice(1), 10);
-    if (level > 4) { continue; }
     const inlineToken = tokens[i + 1];
     const text = inlineToken?.children
       ?.filter(t => t.type === 'text' || t.type === 'code_inline')
@@ -202,6 +201,7 @@ export function extractToc(body: string): string {
     } else {
       slugCounts[slug] = 0;
     }
+    if (level > 4) { continue; }
     headings.push({ level, text, slug });
   }
 
