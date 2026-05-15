@@ -5,7 +5,11 @@
  * still permitted via style-src-attr 'unsafe-inline' on the document.
  */
 
-body {
+/* Use `body.markdown-body` (specificity 0,1,1) so this beats
+   github-markdown-css `.markdown-body { margin: 0 }` (0,1,0). Without the
+   `.markdown-body` qualifier the centered 980px column is pinned to left:0
+   and the fixed-position TOC sidebar paints on top of the article. */
+body.markdown-body {
   box-sizing: border-box;
   max-width: 980px;
   margin: 0 auto;
@@ -207,6 +211,252 @@ body.markdown-body {
     color: #c9d1d9;
   }
   .back-to-top:hover {
+    background: #21262d;
+  }
+}
+
+/* === TOC Sidebar === */
+.toc-sidebar {
+  position: fixed;
+  top: 32px;
+  left: calc(50% - 490px - 250px - 32px);
+  width: 220px;
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.4;
+  border-right: 1px solid var(--borderColor-default, #d0d7de);
+  padding: 8px 12px 8px 0;
+  scrollbar-width: thin;
+}
+
+.toc-sidebar ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.toc-sidebar li {
+  margin: 2px 0;
+}
+
+.toc-sidebar .toc-level-1 { padding-left: 0; }
+.toc-sidebar .toc-level-2 { padding-left: 0; }
+.toc-sidebar .toc-level-3 { padding-left: 16px; }
+.toc-sidebar .toc-level-4 { padding-left: 32px; }
+
+.toc-sidebar a {
+  color: var(--fgColor-muted, #656d76);
+  text-decoration: none;
+  display: block;
+  padding: 2px 4px;
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toc-sidebar a:hover {
+  color: var(--fgColor-default, #1f2328);
+  background: var(--bgColor-muted, #f6f8fa);
+}
+
+.toc-sidebar a.active {
+  color: var(--color-accent-fg, #0969da);
+  font-weight: 600;
+}
+
+/* Hide TOC on viewports where it cannot sit fully outside the 980px column.
+   Math: 50% >= 490 (half body) + 250 (toc width 220 + padding-right 12 + 18 buffer)
+              + 32 (gap)  ->  viewport >= 1544px. */
+@media (max-width: 1543px) {
+  .toc-sidebar {
+    display: none;
+  }
+}
+
+/* Dark mode TOC */
+@media (prefers-color-scheme: dark) {
+  .toc-sidebar {
+    border-right-color: #30363d;
+  }
+  .toc-sidebar a {
+    color: #8b949e;
+  }
+  .toc-sidebar a:hover {
+    color: #c9d1d9;
+    background: #161b22;
+  }
+  .toc-sidebar a.active {
+    color: #58a6ff;
+  }
+}
+
+/* === Collapsible Sections === */
+.collapsible-section {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.collapsible-section > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collapsible-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-section > summary::before {
+  content: '\25B6';
+  font-size: 12px;
+  transition: transform 200ms;
+  flex-shrink: 0;
+}
+
+.collapsible-section[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.collapsible-section > summary h2 {
+  margin: 0;
+  display: inline;
+}
+
+.collapse-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.collapse-controls button {
+  padding: 4px 12px;
+  font-size: 12px;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 6px;
+  background: var(--bgColor-default, #ffffff);
+  color: var(--fgColor-default, #1f2328);
+  cursor: pointer;
+}
+
+.collapse-controls button:hover {
+  background: var(--bgColor-muted, #f6f8fa);
+}
+
+/* Dark mode collapsible */
+@media (prefers-color-scheme: dark) {
+  .collapse-controls button {
+    background: #161b22;
+    border-color: #30363d;
+    color: #c9d1d9;
+  }
+  .collapse-controls button:hover {
+    background: #21262d;
+  }
+}
+
+/* === Heading Quick-Jump === */
+.heading-search-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 20vh;
+  z-index: 2000;
+}
+
+.heading-search-overlay.visible {
+  display: flex;
+}
+
+.heading-search-container {
+  width: 500px;
+  max-width: 90vw;
+  background: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 12px;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.heading-search-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 16px;
+  border: none;
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
+  outline: none;
+  background: transparent;
+  color: var(--fgColor-default, #1f2328);
+  box-sizing: border-box;
+}
+
+.heading-search-results {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.heading-search-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.heading-search-item:hover,
+.heading-search-item.selected {
+  background: var(--bgColor-muted, #f6f8fa);
+}
+
+.heading-search-level {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fgColor-muted, #656d76);
+  background: var(--bgColor-muted, #f6f8fa);
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  min-width: 24px;
+  text-align: center;
+}
+
+.heading-search-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dark mode heading search */
+@media (prefers-color-scheme: dark) {
+  .heading-search-overlay {
+    background: rgba(0, 0, 0, 0.7);
+  }
+  .heading-search-container {
+    background: #161b22;
+    border-color: #30363d;
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4);
+  }
+  .heading-search-input {
+    color: #c9d1d9;
+    border-bottom-color: #30363d;
+  }
+  .heading-search-item:hover,
+  .heading-search-item.selected {
+    background: #21262d;
+  }
+  .heading-search-level {
+    color: #8b949e;
     background: #21262d;
   }
 }

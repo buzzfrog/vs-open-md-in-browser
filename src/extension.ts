@@ -40,25 +40,42 @@ export function githubSlugify(text: string): string {
     .replace(/[^\w\u0080-\uFFFF-]/g, '');
 }
 
+/**
+ * Walk a markdown-it token array and return one entry per heading (all levels),
+ * with the same slug-deduplication logic used by the renderer. Both
+ * `addHeadingIds` and `extractToc` use this so they can never drift apart.
+ */
+export function parseHeadings(tokens: ReturnType<MarkdownIt['parse']>): Array<{ level: number; text: string; slug: string }> {
+  const slugCounts: Record<string, number> = {};
+  const headings: Array<{ level: number; text: string; slug: string }> = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].type !== 'heading_open') { continue; }
+    const level = parseInt(tokens[i].tag.slice(1), 10);
+    const inlineToken = tokens[i + 1];
+    const text = inlineToken?.children
+      ?.filter(t => t.type === 'text' || t.type === 'code_inline')
+      .map(t => t.content)
+      .join('') ?? '';
+    let slug = githubSlugify(text);
+    if (slug in slugCounts) {
+      slugCounts[slug]++;
+      slug = `${slug}-${slugCounts[slug]}`;
+    } else {
+      slugCounts[slug] = 0;
+    }
+    headings.push({ level, text, slug });
+  }
+  return headings;
+}
+
 function addHeadingIds(md: MarkdownIt): void {
   md.core.ruler.push('heading_ids', (state) => {
-    const slugCounts: Record<string, number> = {};
+    const parsed = parseHeadings(state.tokens);
+    let headingIndex = 0;
     for (let idx = 0; idx < state.tokens.length; idx++) {
       const token = state.tokens[idx];
       if (token.type !== 'heading_open') { continue; }
-      const inlineToken = state.tokens[idx + 1];
-      const text = inlineToken?.children
-        ?.filter(t => t.type === 'text' || t.type === 'code_inline')
-        .map(t => t.content)
-        .join('') ?? '';
-      let slug = githubSlugify(text);
-      if (slug in slugCounts) {
-        slugCounts[slug]++;
-        slug = `${slug}-${slugCounts[slug]}`;
-      } else {
-        slugCounts[slug] = 0;
-      }
-      token.attrSet('id', slug);
+      token.attrSet('id', parsed[headingIndex++].slug);
     }
   });
 }
@@ -87,7 +104,8 @@ export function activate(context: vscode.ExtensionContext): void {
           : path.basename(sourcePath);
         const title = escapeHtml(titleText);
         const readingTime = estimateReadingTime(body);
-        const html = wrapHtmlDocument(title, bodyHtml, '', readingTime);
+        const toc = extractToc(body);
+        const html = wrapHtmlDocument(title, bodyHtml, '', readingTime, toc);
 
         const mdRenderer = (fsPath: string, rawContent: string): string => {
           const { body: linkedBody, data: linkedData } = extractFrontmatter(rawContent);
@@ -102,7 +120,8 @@ export function activate(context: vscode.ExtensionContext): void {
             ? relToRoot.split(path.sep).join('/') + '/'
             : '';
           const linkedReadingTime = estimateReadingTime(linkedBody);
-          return wrapHtmlDocument(linkedTitle, linkedBodyHtml, assetBase, linkedReadingTime);
+          const linkedToc = extractToc(linkedBody);
+          return wrapHtmlDocument(linkedTitle, linkedBodyHtml, assetBase, linkedReadingTime, linkedToc);
         };
 
         const localUri = await previewServer.publish(html, sourceDir, mdRenderer);
@@ -139,7 +158,7 @@ async function resolveTarget(uri?: vscode.Uri): Promise<vscode.Uri | undefined> 
   return undefined;
 }
 
-export function wrapHtmlDocument(title: string, body: string, assetBase: string = '', readingTime?: number): string {
+export function wrapHtmlDocument(title: string, body: string, assetBase: string = '', readingTime?: number, tocHtml?: string): string {
   // `assetBase` must be empty or a document-relative prefix made only of one
   // or more `../` segments so asset URLs remain aligned with the published
   // document path.
@@ -163,9 +182,12 @@ export function wrapHtmlDocument(title: string, body: string, assetBase: string 
   <link rel="stylesheet" href="${assetBase}_assets/preview.css" />
 </head>
 <body class="markdown-body">
-${readingTimeHtml}${body}
+${tocHtml ?? ''}${readingTimeHtml}${body}
 <script type="module" src="${assetBase}_assets/mermaid-init.mjs"></script>
 <script type="module" src="${assetBase}_assets/document-enhancements.mjs"></script>
+<script type="module" src="${assetBase}_assets/scroll-spy.mjs"></script>
+<script type="module" src="${assetBase}_assets/collapsible-sections.mjs"></script>
+<script type="module" src="${assetBase}_assets/heading-search.mjs"></script>
 </body>
 </html>`;
 }
@@ -174,6 +196,25 @@ export function escapeHtml(s: string): string {
   return s.replace(/[&<>]/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!
   );
+}
+
+export function extractToc(body: string): string {
+  const all = parseHeadings(md.parse(body, {}));
+  const headings = all.filter(h => h.level <= 4);
+
+  if (headings.length < 4) { return ''; }
+
+  const escaped = headings.map(h => ({
+    ...h,
+    text: escapeHtml(h.text)
+  }));
+
+  let html = '<nav class="toc-sidebar" aria-label="Table of Contents"><ol>';
+  for (const h of escaped) {
+    html += `<li class="toc-level-${h.level}"><a href="#${h.slug}">${h.text}</a></li>`;
+  }
+  html += '</ol></nav>';
+  return html;
 }
 
 export function estimateReadingTime(text: string): number {
