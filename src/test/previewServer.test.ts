@@ -591,6 +591,25 @@ suite('PreviewServer', () => {
       assert.ok(res.body.toString('utf8').includes('heading-search'), 'body should contain heading-search');
     });
 
+    test('GET /_assets/scroll-spy.mjs returns 200 with javascript content-type', async () => {
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      const res = await httpGet(uri, '/_assets/scroll-spy.mjs');
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'application/javascript; charset=utf-8');
+      assert.ok(res.body.toString('utf8').includes('scroll-spy'), 'body should contain scroll-spy');
+    });
+
+    test('GET /_assets/collapsible-sections.mjs returns 200 with javascript content-type', async () => {
+      const uri = await assetServer.publish('<p>x</p>', tmpDir);
+      const res = await httpGet(uri, '/_assets/collapsible-sections.mjs');
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.headers['content-type'], 'application/javascript; charset=utf-8');
+      assert.ok(
+        res.body.toString('utf8').includes('collapsible-sections'),
+        'body should contain collapsible-sections',
+      );
+    });
+
     test('GET /_assets/something-else returns 404 (allow-list only)', async () => {
       const uri = await assetServer.publish('<p>x</p>', tmpDir);
       const res = await httpGet(uri, '/_assets/something-else.mjs');
