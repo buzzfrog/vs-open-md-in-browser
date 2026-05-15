@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import MarkdownIt from 'markdown-it';
 import { estimateReadingTime, extractFrontmatter, extractToc, githubSlugify, parseHeadings, renderFrontmatterTable, renderMarkdown, wrapHtmlDocument } from '../extension';
 
 suite('openMdInBrowser', () => {
@@ -231,7 +232,6 @@ suite('extractToc', () => {
 
 suite('parseHeadings', () => {
   test('returns one entry per heading with correct level, text, and slug', () => {
-    const MarkdownIt = require('markdown-it');
     const mi = new MarkdownIt();
     const tokens = mi.parse('# Hello\n## World', {});
     const headings = parseHeadings(tokens);
@@ -241,7 +241,6 @@ suite('parseHeadings', () => {
   });
 
   test('includes all heading levels including h5 and h6', () => {
-    const MarkdownIt = require('markdown-it');
     const mi = new MarkdownIt();
     const tokens = mi.parse('## A\n##### B\n###### C', {});
     const headings = parseHeadings(tokens);
@@ -252,7 +251,6 @@ suite('parseHeadings', () => {
   });
 
   test('deduplicates slugs across all levels', () => {
-    const MarkdownIt = require('markdown-it');
     const mi = new MarkdownIt();
     const tokens = mi.parse('## Foo\n##### Foo\n## Foo', {});
     const headings = parseHeadings(tokens);
@@ -262,7 +260,6 @@ suite('parseHeadings', () => {
   });
 
   test('returns empty array for body with no headings', () => {
-    const MarkdownIt = require('markdown-it');
     const mi = new MarkdownIt();
     const tokens = mi.parse('Just a paragraph.', {});
     assert.deepStrictEqual(parseHeadings(tokens), []);
@@ -292,4 +289,3 @@ suite('heading search integration', () => {
     assert.ok(html.includes('../_assets/heading-search.mjs'));
   });
 });
-
