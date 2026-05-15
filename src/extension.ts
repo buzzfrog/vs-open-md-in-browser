@@ -40,25 +40,42 @@ export function githubSlugify(text: string): string {
     .replace(/[^\w\u0080-\uFFFF-]/g, '');
 }
 
+/**
+ * Walk a markdown-it token array and return one entry per heading (all levels),
+ * with the same slug-deduplication logic used by the renderer. Both
+ * `addHeadingIds` and `extractToc` use this so they can never drift apart.
+ */
+export function parseHeadings(tokens: ReturnType<MarkdownIt['parse']>): Array<{ level: number; text: string; slug: string }> {
+  const slugCounts: Record<string, number> = {};
+  const headings: Array<{ level: number; text: string; slug: string }> = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].type !== 'heading_open') { continue; }
+    const level = parseInt(tokens[i].tag.slice(1), 10);
+    const inlineToken = tokens[i + 1];
+    const text = inlineToken?.children
+      ?.filter(t => t.type === 'text' || t.type === 'code_inline')
+      .map(t => t.content)
+      .join('') ?? '';
+    let slug = githubSlugify(text);
+    if (slug in slugCounts) {
+      slugCounts[slug]++;
+      slug = `${slug}-${slugCounts[slug]}`;
+    } else {
+      slugCounts[slug] = 0;
+    }
+    headings.push({ level, text, slug });
+  }
+  return headings;
+}
+
 function addHeadingIds(md: MarkdownIt): void {
   md.core.ruler.push('heading_ids', (state) => {
-    const slugCounts: Record<string, number> = {};
+    const parsed = parseHeadings(state.tokens);
+    let headingIndex = 0;
     for (let idx = 0; idx < state.tokens.length; idx++) {
       const token = state.tokens[idx];
       if (token.type !== 'heading_open') { continue; }
-      const inlineToken = state.tokens[idx + 1];
-      const text = inlineToken?.children
-        ?.filter(t => t.type === 'text' || t.type === 'code_inline')
-        .map(t => t.content)
-        .join('') ?? '';
-      let slug = githubSlugify(text);
-      if (slug in slugCounts) {
-        slugCounts[slug]++;
-        slug = `${slug}-${slugCounts[slug]}`;
-      } else {
-        slugCounts[slug] = 0;
-      }
-      token.attrSet('id', slug);
+      token.attrSet('id', parsed[headingIndex++].slug);
     }
   });
 }
@@ -182,28 +199,8 @@ export function escapeHtml(s: string): string {
 }
 
 export function extractToc(body: string): string {
-  const tokens = md.parse(body, {});
-  const headings: Array<{ level: number; text: string; slug: string }> = [];
-  const slugCounts: Record<string, number> = {};
-
-  for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i].type !== 'heading_open') { continue; }
-    const level = parseInt(tokens[i].tag.slice(1), 10);
-    const inlineToken = tokens[i + 1];
-    const text = inlineToken?.children
-      ?.filter(t => t.type === 'text' || t.type === 'code_inline')
-      .map(t => t.content)
-      .join('') ?? '';
-    let slug = githubSlugify(text);
-    if (slug in slugCounts) {
-      slugCounts[slug]++;
-      slug = `${slug}-${slugCounts[slug]}`;
-    } else {
-      slugCounts[slug] = 0;
-    }
-    if (level > 4) { continue; }
-    headings.push({ level, text, slug });
-  }
+  const all = parseHeadings(md.parse(body, {}));
+  const headings = all.filter(h => h.level <= 4);
 
   if (headings.length < 4) { return ''; }
 

@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { estimateReadingTime, extractFrontmatter, extractToc, githubSlugify, renderFrontmatterTable, renderMarkdown, wrapHtmlDocument } from '../extension';
+import { estimateReadingTime, extractFrontmatter, extractToc, githubSlugify, parseHeadings, renderFrontmatterTable, renderMarkdown, wrapHtmlDocument } from '../extension';
 
 suite('openMdInBrowser', () => {
   suiteSetup(async () => {
@@ -226,6 +226,46 @@ suite('extractToc', () => {
     assert.ok(toc.includes('toc-level-2'));
     assert.ok(toc.includes('toc-level-3'));
     assert.ok(toc.includes('toc-level-4'));
+  });
+});
+
+suite('parseHeadings', () => {
+  test('returns one entry per heading with correct level, text, and slug', () => {
+    const MarkdownIt = require('markdown-it');
+    const mi = new MarkdownIt();
+    const tokens = mi.parse('# Hello\n## World', {});
+    const headings = parseHeadings(tokens);
+    assert.strictEqual(headings.length, 2);
+    assert.deepStrictEqual(headings[0], { level: 1, text: 'Hello', slug: 'hello' });
+    assert.deepStrictEqual(headings[1], { level: 2, text: 'World', slug: 'world' });
+  });
+
+  test('includes all heading levels including h5 and h6', () => {
+    const MarkdownIt = require('markdown-it');
+    const mi = new MarkdownIt();
+    const tokens = mi.parse('## A\n##### B\n###### C', {});
+    const headings = parseHeadings(tokens);
+    assert.strictEqual(headings.length, 3);
+    assert.strictEqual(headings[0].level, 2);
+    assert.strictEqual(headings[1].level, 5);
+    assert.strictEqual(headings[2].level, 6);
+  });
+
+  test('deduplicates slugs across all levels', () => {
+    const MarkdownIt = require('markdown-it');
+    const mi = new MarkdownIt();
+    const tokens = mi.parse('## Foo\n##### Foo\n## Foo', {});
+    const headings = parseHeadings(tokens);
+    assert.strictEqual(headings[0].slug, 'foo');
+    assert.strictEqual(headings[1].slug, 'foo-1');
+    assert.strictEqual(headings[2].slug, 'foo-2');
+  });
+
+  test('returns empty array for body with no headings', () => {
+    const MarkdownIt = require('markdown-it');
+    const mi = new MarkdownIt();
+    const tokens = mi.parse('Just a paragraph.', {});
+    assert.deepStrictEqual(parseHeadings(tokens), []);
   });
 });
 
